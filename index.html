@@ -1,0 +1,1555 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gestión Ganadera</title>
+  <link rel="icon" type="image/png" sizes="48x48" href="icons/favicon-48.png" />
+  <link rel="icon" type="image/png" href="logo.png" />
+
+  <!-- PWA: manifiesto, color de la barra y compatibilidad con iOS -->
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#166534" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="GanaderíaApp" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Leaflet + Leaflet.draw (mapa y herramientas de dibujo) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+
+  <style>
+    /* Evita que el reset de Tailwind rompa las imágenes (teselas) de Leaflet */
+    .leaflet-container img { max-width: none !important; max-height: none !important; }
+    #mapa { z-index: 0; }
+    .leaflet-tooltip.tooltip-finca {
+      background: rgba(20, 83, 45, 0.85);
+      color: #fff;
+      border: 0;
+      box-shadow: none;
+      font-weight: 600;
+      font-size: 12px;
+    }
+    .leaflet-tooltip-top.tooltip-finca::before { border-top-color: rgba(20, 83, 45, 0.85); }
+
+    /* ---------- Veterinario: ve la explotación del ganadero y solo registra tratamientos ---------- */
+    .modo-veterinario #vaca-form, .modo-veterinario #finca-form, .modo-veterinario #cebadero-form,
+    .modo-veterinario #cebo-form-card, .modo-veterinario #vaca-modal-cria, .modo-veterinario #vaca-modal-editar,
+    .modo-veterinario #vaca-modal-baja, .modo-veterinario #ficha-sit-seccion, .modo-veterinario #copia-importar,
+    .modo-veterinario #legado-wrap, .modo-veterinario #copia-confirmar, .modo-veterinario .leaflet-draw,
+    .modo-veterinario [data-action="edit-vaca"], .modo-veterinario [data-action="baja-vaca"],
+    .modo-veterinario [data-action="reactivar-vaca"], .modo-veterinario [data-action="edit-finca"],
+    .modo-veterinario [data-action="del-finca"], .modo-veterinario [data-action="edit-cebadero"],
+    .modo-veterinario [data-action="del-cebadero"], .modo-veterinario [data-action="salida-cebo"],
+    .modo-veterinario [data-action="edit-cebo"], .modo-veterinario [data-action="del-cebo"],
+    .modo-veterinario [data-action="registrar-parto"], .modo-veterinario [data-action="editar-gestacion"],
+    .modo-veterinario #filtro-finca, .modo-veterinario [data-action="ver-vacas"],
+    .modo-veterinario .col-ubicacion, .modo-veterinario [data-tab="fincas"], .modo-veterinario [data-tab="cebaderos"], .modo-veterinario [data-tab="economia"], .modo-veterinario .solo-ganadero,
+    .modo-veterinario div:has(> #stat-fincas), .modo-veterinario div:has(> #stat-sin-finca) { display: none !important; }
+
+    /* ---------- Árbol genealógico ---------- */
+    .arbol-caja { display: block; width: 11rem; text-align: left; background: #fff; border: 1px solid #d6d3d1;
+      border-radius: 0.6rem; padding: 0.45rem 0.6rem; box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+    button.arbol-caja:hover { border-color: #15803d; background: #f0fdf4; }
+    .arbol-central { border: 2px solid #15803d; background: #f0fdf4; }
+    .arbol-vacia { border-style: dashed; background: #fafaf9; box-shadow: none; }
+    .arbol-rol { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: #78716c; }
+    /* Ascendencia: pedigrí de izquierda a derecha */
+    .ped { display: flex; align-items: center; }
+    .ped-padres { display: flex; flex-direction: column; justify-content: center; padding-left: 28px; position: relative; }
+    .ped-padres::before { content: ''; position: absolute; left: 0; top: 50%; width: 14px; border-top: 2px solid #a8a29e; }
+    .ped-padres > .ped { position: relative; padding: 4px 0; }
+    .ped-padres > .ped::before { content: ''; position: absolute; left: -14px; top: 50%; width: 14px; border-top: 2px solid #a8a29e; }
+    .ped-padres > .ped::after { content: ''; position: absolute; left: -14px; border-left: 2px solid #a8a29e; }
+    .ped-padres > .ped:first-child::after { top: 50%; bottom: 0; }
+    .ped-padres > .ped:last-child::after { top: 0; bottom: 50%; }
+    /* Descendencia: organigrama de arriba abajo */
+    .arbol-desc { display: inline-block; min-width: 100%; }
+    .arbol-desc ul { display: flex; justify-content: center; padding-top: 20px; position: relative; }
+    .arbol-desc > ul { padding-top: 0; }
+    .arbol-desc li { display: flex; flex-direction: column; align-items: center; position: relative; padding: 20px 6px 0; }
+    .arbol-desc li::before, .arbol-desc li::after { content: ''; position: absolute; top: 0; right: 50%; width: 50%; height: 20px; border-top: 2px solid #a8a29e; }
+    .arbol-desc li::after { right: auto; left: 50%; border-left: 2px solid #a8a29e; }
+    .arbol-desc li:only-child::before, .arbol-desc li:only-child::after { border-top: 0; }
+    .arbol-desc li:only-child::before { display: none; }
+    .arbol-desc li:first-child::before, .arbol-desc li:last-child::after { border: 0 none; }
+    .arbol-desc li:last-child::before { border-right: 2px solid #a8a29e; border-radius: 0 6px 0 0; }
+    .arbol-desc li:first-child::after { border-radius: 6px 0 0 0; }
+    .arbol-desc li:only-child::after { border-radius: 0; }
+    .arbol-desc > ul > li { padding-top: 0; }
+    .arbol-desc > ul > li::before, .arbol-desc > ul > li::after { display: none; }
+    .arbol-desc ul ul::before { content: ''; position: absolute; top: 0; left: 50%; height: 20px; border-left: 2px solid #a8a29e; }
+  </style>
+</head>
+<body class="bg-stone-100 text-stone-800 min-h-screen">
+
+  <!-- ============ LOGIN ============ -->
+  <section id="login-view" class="min-h-screen flex items-center justify-center p-4">
+    <div class="w-full max-w-sm bg-white rounded-2xl shadow-lg p-8 space-y-5">
+      <div class="text-center">
+        <!-- Logotipo oficial (logo.png en la raíz); si falta el archivo se muestra el emoji -->
+        <img id="login-logo" src="logo.png" alt="Logotipo de Gestión Ganadera" class="mx-auto h-36 w-36 object-contain mb-1" />
+        <div class="hidden text-5xl mb-2" aria-hidden="true">🐄</div>
+        <h1 class="text-2xl font-bold text-green-800">Gestión Ganadera</h1>
+        <p class="text-sm text-stone-500">Accede a tu explotación o crea una cuenta nueva</p>
+      </div>
+
+      <!-- Selector Iniciar sesión / Crear cuenta -->
+      <div class="grid grid-cols-2 rounded-lg bg-stone-100 p-1 text-sm font-medium" role="tablist">
+        <button type="button" id="tab-login-btn" role="tab" aria-selected="true"
+          class="rounded-md py-2 transition bg-white shadow text-green-800">Iniciar sesión</button>
+        <button type="button" id="tab-register-btn" role="tab" aria-selected="false"
+          class="rounded-md py-2 transition text-stone-600 hover:text-stone-800">Crear cuenta</button>
+      </div>
+
+    <form id="login-form" class="space-y-5">
+
+      <div>
+        <label for="username" class="block text-sm font-medium mb-1">Correo electrónico</label>
+        <input id="username" type="email" autocomplete="email" required
+          class="w-full rounded-lg border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-600" />
+      </div>
+
+      <div>
+        <label for="password" class="block text-sm font-medium mb-1">Contraseña</label>
+        <input id="password" type="password" autocomplete="current-password" required
+          class="w-full rounded-lg border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-600" />
+      </div>
+
+      <p id="login-error" class="hidden text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2"></p>
+      <p id="login-ok" class="hidden text-sm text-green-800 bg-green-50 rounded-lg px-3 py-2"></p>
+
+      <button id="login-submit" type="submit"
+        class="w-full bg-green-700 hover:bg-green-800 disabled:opacity-60 text-white font-semibold rounded-lg py-2.5 transition">
+        Entrar
+      </button>
+      <button id="login-olvido" type="button" class="w-full text-sm text-green-800 hover:underline">¿Olvidaste tu contraseña?</button>
+    </form>
+
+    <!-- Registro de nuevos usuarios -->
+    <form id="register-form" class="hidden space-y-4" novalidate>
+      <div>
+        <label for="reg-usuario" class="block text-sm font-medium mb-1">Usuario</label>
+        <input id="reg-usuario" type="text" autocomplete="username" maxlength="30" placeholder="Tu nombre de usuario"
+          class="w-full rounded-lg border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-600" />
+      </div>
+
+      <div>
+        <label for="reg-email" class="block text-sm font-medium mb-1">Correo electrónico</label>
+        <input id="reg-email" type="email" autocomplete="email" placeholder="tu@correo.es"
+          class="w-full rounded-lg border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-600" />
+      </div>
+
+      <div>
+        <label for="reg-password" class="block text-sm font-medium mb-1">Contraseña</label>
+        <input id="reg-password" type="password" autocomplete="new-password"
+          class="w-full rounded-lg border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-600" />
+        <p class="text-xs text-stone-500 mt-1">Mínimo 6 caracteres.</p>
+      </div>
+
+      <div>
+        <label for="reg-password2" class="block text-sm font-medium mb-1">Repetir contraseña</label>
+        <input id="reg-password2" type="password" autocomplete="new-password"
+          class="w-full rounded-lg border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-600" />
+      </div>
+
+      <div>
+        <label for="reg-perfil" class="block text-sm font-medium mb-1">Perfil de usuario *</label>
+        <select id="reg-perfil"
+          class="w-full rounded-lg border border-stone-300 px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-600">
+          <option value="">Selecciona tu perfil…</option>
+          <option value="ganadero">Ganadero</option>
+          <option value="veterinario">Veterinario</option>
+        </select>
+      </div>
+
+      <div>
+        <label for="reg-tipo" class="block text-sm font-medium mb-1">Tipo de explotación *</label>
+        <select id="reg-tipo"
+          class="w-full rounded-lg border border-stone-300 px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-600">
+          <option value="">Selecciona el tipo…</option>
+          <option value="bovino">Bovino (Vacas)</option>
+          <option value="porcino">Porcino (Cerdos)</option>
+          <option value="ovino">Ovino / Caprino (Ovejas / Cabras)</option>
+          <option value="avicola">Avícola (Pollos / Aves)</option>
+          <option value="mixta">Mixta</option>
+        </select>
+      </div>
+
+      <fieldset id="reg-mixta-wrap" class="hidden rounded-lg border border-stone-200 bg-stone-50 p-3 space-y-2">
+        <legend class="px-1 text-sm font-medium">Especies de tu explotación mixta *</legend>
+        <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="reg-especie" value="bovino" class="accent-green-700" /> Bovino (Vacas)</label>
+        <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="reg-especie" value="porcino" class="accent-green-700" /> Porcino (Cerdos)</label>
+        <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="reg-especie" value="ovino" class="accent-green-700" /> Ovino / Caprino (Ovejas / Cabras)</label>
+        <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="reg-especie" value="avicola" class="accent-green-700" /> Avícola (Pollos / Aves)</label>
+        <p class="text-xs text-stone-500">Marca al menos dos especies.</p>
+      </fieldset>
+
+      <p id="register-error" class="hidden text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2"></p>
+
+      <button id="register-submit" type="submit"
+        class="w-full bg-green-700 hover:bg-green-800 disabled:opacity-60 text-white font-semibold rounded-lg py-2.5 transition">
+        Crear cuenta y entrar
+      </button>
+      <p class="text-xs text-stone-500 text-center">
+        La cuenta y los datos de tu explotación se guardan solo en este navegador.
+      </p>
+    </form>
+    </div>
+  </section>
+
+  <!-- ============ APLICACIÓN ============ -->
+  <div id="app-view" class="hidden">
+    <header class="bg-green-800 text-white shadow">
+      <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-3 text-lg font-bold">
+          <!-- Iconos PNG de las especies de la cuenta, en fila, sobre un fondo blanco redondeado (resalta sobre el verde).
+               Con una especie queda un círculo; con varias se ensancha. Lo rellena actualizarIconoCabecera() en app.js.
+               El logotipo (logo.png) solo se usa en la pantalla de inicio de sesión y registro. -->
+          <span id="app-icono" role="img" aria-label="Explotación"
+            class="flex h-12 min-w-[3rem] shrink-0 flex-nowrap items-center justify-center gap-1 rounded-full bg-white px-1.5 shadow-md ring-2 ring-white/60"></span>
+          <span>Gestión Ganadera</span>
+        </div>
+        <div class="flex items-center gap-3 text-sm">
+          <span id="ganadero-vista-wrap" class="hidden flex items-center gap-1">
+            <label for="ganadero-vista" class="hidden md:inline text-green-100">Ganadero:</label>
+            <select id="ganadero-vista"
+              class="max-w-[10rem] rounded-lg bg-green-700 text-white border border-green-600 px-2 py-1.5 text-sm"></select>
+          </span>
+          <span id="nube-estado" class="hidden sm:inline text-xs whitespace-nowrap"></span>
+          <button id="nube-refrescar" type="button" title="Traer los últimos cambios de la nube" aria-label="Actualizar"
+            class="bg-green-700 hover:bg-green-600 rounded-lg px-2.5 py-1.5 transition">↻</button>
+          <button id="perfil-btn" type="button" title="Mi perfil" aria-label="Abrir mi perfil"
+            class="bg-green-700 hover:bg-green-600 rounded-lg px-3 py-1.5 transition flex items-center gap-1.5">
+            <span aria-hidden="true">👤</span><span id="user-label" class="hidden sm:inline"></span>
+          </button>
+          <button id="logout-btn" class="bg-green-900 hover:bg-green-950 rounded-lg px-3 py-1.5 transition">
+            Cerrar sesión
+          </button>
+        </div>
+      </div>
+      <nav class="max-w-6xl mx-auto px-4 flex gap-1">
+        <button data-tab="vacas"
+          class="tab-btn px-4 py-2 rounded-t-lg text-sm font-medium transition"><span data-t="tabAnimales">Vacas</span></button>
+        <button data-tab="fincas"
+          class="tab-btn px-4 py-2 rounded-t-lg text-sm font-medium transition">Fincas</button>
+        <button data-tab="cebaderos"
+          class="tab-btn px-4 py-2 rounded-t-lg text-sm font-medium transition">Cebaderos</button>
+        <button data-tab="economia"
+          class="tab-btn px-4 py-2 rounded-t-lg text-sm font-medium transition">Economía</button>
+        <button data-tab="bajas"
+          class="tab-btn px-4 py-2 rounded-t-lg text-sm font-medium transition">Histórico de bajas</button>
+      </nav>
+    </header>
+
+    <main class="max-w-6xl mx-auto px-4 py-6">
+      <p id="nube-aviso" class="hidden mb-4 text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2"></p>
+      <div id="vet-sin-ganaderos" class="hidden mb-6 rounded-xl border border-sky-200 bg-sky-50 p-5">
+        <p class="font-semibold text-sky-900">🩺 Todavía no atiendes a ningún ganadero</p>
+        <p class="text-sm text-sky-900 mt-1">Pide a tu ganadero que genere un código de invitación en «Mi perfil» y escríbelo en tu «Mi perfil» (👤, arriba a la derecha). Después verás aquí sus animales y podrás registrar tratamientos.</p>
+      </div>
+
+      <!-- ====== VACAS ====== -->
+      <section id="tab-vacas" class="space-y-6">
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          <div class="bg-white rounded-xl shadow p-4">
+            <p data-t="statAnimales" class="text-xs uppercase text-stone-500">Total de vacas</p>
+            <p id="stat-vacas" class="text-3xl font-bold text-green-800">0</p>
+          </div>
+          <div class="bg-white rounded-xl shadow p-4">
+            <p class="text-xs uppercase text-stone-500">Total de fincas</p>
+            <p id="stat-fincas" class="text-3xl font-bold text-green-800">0</p>
+          </div>
+          <div class="bg-white rounded-xl shadow p-4 col-span-2 sm:col-span-1">
+            <p class="text-xs uppercase text-stone-500">Sin finca asignada</p>
+            <p id="stat-sin-finca" class="text-3xl font-bold text-amber-600">0</p>
+          </div>
+        </div>
+
+        <!-- Avisos al entrar -->
+        <div id="panel-avisos" class="bg-white rounded-xl shadow p-5">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <h2 class="text-lg font-semibold">🔔 Avisos</h2>
+            <span id="avisos-resumen" class="text-xs text-stone-500"></span>
+          </div>
+          <ul id="avisos-lista" class="divide-y max-h-72 overflow-auto"></ul>
+        </div>
+
+        <!-- Agenda clínica (solo perfil veterinario) -->
+        <div id="panel-agenda" class="hidden bg-white rounded-xl shadow p-5">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <h2 class="text-lg font-semibold">🩺 Agenda clínica</h2>
+            <div class="flex flex-wrap items-center gap-2">
+              <span id="agenda-resumen" class="text-xs text-stone-500"></span>
+              <button id="grupo-btn" type="button" class="bg-green-700 hover:bg-green-800 text-white rounded-lg px-3 py-1.5 text-sm">💉 Tratamiento en grupo</button>
+              
+            </div>
+          </div>
+          <div id="agenda-lista" class="max-h-96 overflow-auto space-y-4"></div>
+        </div>
+
+        <!-- Panel de alertas reproductivas -->
+        <div id="panel-partos" class="bg-white rounded-xl shadow p-5">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <h2 class="text-lg font-semibold">🍼 Próximos partos</h2>
+            <span id="partos-resumen" class="text-xs text-stone-500"></span>
+          </div>
+          <div id="partos-lista" class="max-h-72 overflow-auto"></div>
+        </div>
+
+        <form id="vaca-form" class="bg-white rounded-xl shadow p-5">
+          <div class="flex items-center justify-between mb-4">
+            <h2 id="vaca-form-title" class="text-lg font-semibold">Añadir vaca</h2>
+            <span id="vaca-editando" class="hidden text-xs bg-amber-100 text-amber-800 rounded-full px-3 py-1">Modo edición</span>
+          </div>
+          <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div id="vaca-especie-wrap" class="hidden">
+              <label class="block text-sm font-medium mb-1">Especie *</label>
+              <select id="vaca-especie"
+                class="w-full rounded-lg border border-stone-300 px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-600 disabled:bg-stone-100"></select>
+            </div>
+            <div>
+              <label data-t="crotalLabel" class="block text-sm font-medium mb-1">Crotal / ID *</label>
+              <input id="vaca-crotal" required data-ph="crotalPh" placeholder="ES0012345678"
+                class="w-full rounded-lg border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-600" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Nombre</label>
+              <input id="vaca-nombre" data-ph="nombrePh" placeholder="Pinta"
+                class="w-full rounded-lg border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-600" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Raza</label>
+              <input id="vaca-raza" list="razas" data-ph="razaPh" placeholder="Rubia gallega"
+                class="w-full rounded-lg border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-600" />
+              <datalist id="razas">
+                <option value="Rubia gallega"></option>
+                <option value="Cachena"></option>
+                <option value="Limiana"></option>
+                <option value="Limusina"></option>
+              </datalist>
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Fecha de nacimiento</label>
+              <input id="vaca-nacimiento" type="date"
+                class="w-full rounded-lg border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-600" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Finca</label>
+              <select id="vaca-finca"
+                class="w-full rounded-lg border border-stone-300 px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-600"></select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Lote</label>
+              <select id="vaca-lote"
+                class="w-full rounded-lg border border-stone-300 px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-600"></select>
+              <p id="vaca-lote-hint" class="text-xs text-stone-500 mt-1"></p>
+            </div>
+            <div class="sm:col-span-2">
+              <label class="block text-sm font-medium mb-1">Madre</label>
+              <select id="vaca-madre"
+                class="w-full rounded-lg border border-stone-300 px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-600"></select>
+              <p id="vaca-madre-hint" class="text-xs text-stone-500 mt-1"></p>
+            </div>
+            <div class="sm:col-span-2">
+              <label class="block text-sm font-medium mb-1" for="vaca-padre">Padre</label>
+              <select id="vaca-padre"
+                class="w-full rounded-lg border border-stone-300 px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-600"></select>
+              <div id="vaca-padre-externo-wrap" class="hidden mt-2">
+                <input id="vaca-padre-externo" maxlength="120" placeholder="Pajuela / semental / ganadería de origen"
+                  class="w-full rounded-lg border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-600" />
+              </div>
+              <p id="vaca-padre-hint" class="text-xs text-stone-500 mt-1"></p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1" for="vaca-sexo">Sexo</label>
+              <select id="vaca-sexo"
+                class="w-full rounded-lg border border-stone-300 px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-600">
+                <option value="H">♀ Hembra</option>
+                <option value="M">♂ Macho</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Estado</label>
+              <select id="vaca-estado"
+                class="w-full rounded-lg border border-stone-300 px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-600"></select>
+            </div>
+          </div>
+          <!-- Gestación (solo si el estado es "Gestante") -->
+          <div id="vaca-gestacion" class="hidden mt-4 rounded-lg bg-purple-50 border border-purple-200 p-3">
+            <p class="text-sm font-medium mb-2">🤰 Gestación</p>
+            <div class="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label class="block text-xs font-medium mb-1">Fecha de cubrición / inseminación</label>
+                <input id="vaca-cubricion" type="date"
+                  class="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-600" />
+              </div>
+              <div>
+                <label class="block text-xs font-medium mb-1">Fecha prevista de parto</label>
+                <input id="vaca-parto" type="date"
+                  class="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-600" />
+              </div>
+            </div>
+            <p id="vaca-gestacion-hint" class="text-xs text-stone-500 mt-2">Se calcula sola al indicar la cubrición (283 días, la gestación media de una vaca) y puedes corregirla.</p>
+          </div>
+
+          <!-- Fecha del movimiento (solo si cambia la finca o el lote) -->
+          <div id="vaca-mov-wrap" class="hidden mt-4 rounded-lg bg-sky-50 border border-sky-200 p-3">
+            <p class="text-sm font-medium mb-2">🧭 Movimiento de finca / lote</p>
+            <div class="max-w-xs">
+              <label class="block text-xs font-medium mb-1">Fecha del movimiento</label>
+              <input id="vaca-fecha-mov" type="date"
+                class="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-600" />
+            </div>
+            <p id="vaca-mov-detalle" class="text-xs text-stone-600 mt-2"></p>
+          </div>
+
+          <div class="mt-4 rounded-lg bg-stone-50 border border-stone-200 p-3">
+            <p data-t="criasTitulo" class="text-sm font-medium mb-2">🐮 Crías de esta vaca</p>
+            <div id="vaca-crias"></div>
+          </div>
+          <p id="vaca-error" class="hidden mt-3 text-sm text-red-600"></p>
+          <p id="vaca-aviso" class="hidden mt-3 text-sm text-green-700 bg-green-50 rounded-lg px-3 py-2"></p>
+          <div class="mt-4 flex flex-wrap gap-2">
+            <button id="vaca-submit" type="submit"
+              class="bg-green-700 hover:bg-green-800 text-white font-semibold rounded-lg px-5 py-2 transition">
+              Añadir vaca
+            </button>
+            <button id="vaca-cancel" type="button"
+              class="hidden bg-stone-200 hover:bg-stone-300 text-stone-800 font-semibold rounded-lg px-5 py-2 transition">
+              Cancelar edición
+            </button>
+          </div>
+        </form>
+
+        <div class="bg-white rounded-xl shadow p-5">
+          <div class="flex flex-col lg:flex-row gap-3 lg:items-center lg:justify-between mb-4">
+            <h2 data-t="listadoTitulo" class="text-lg font-semibold">Listado de vacas</h2>
+            <div class="flex flex-col sm:flex-row gap-2">
+              <button id="btn-export-vacas" type="button" title="Descarga el listado que ves ahora (con los filtros aplicados)"
+                class="text-sm bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-3 py-2 transition whitespace-nowrap">⬇ Exportar a Excel / CSV</button>
+              <input id="buscar-vaca" type="search" data-ph="buscarAnimal" placeholder="Buscar por crotal, nombre o raza…"
+                class="rounded-lg border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
+              <select id="filtro-finca"
+                class="rounded-lg border border-stone-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-600"></select>
+              <select id="filtro-lote" aria-hidden="true"
+                class="hidden rounded-lg border border-stone-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-600"></select>
+              <select id="filtro-estado"
+                class="rounded-lg border border-stone-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-600"></select>
+              <select id="orden-vacas" aria-label="Ordenar el listado"
+                class="rounded-lg border border-stone-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-600">
+                <option value="">Orden de alta</option>
+                <option value="edad-desc">Edad: de mayor a menor</option>
+                <option value="edad-asc">Edad: de menor a mayor</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm text-left">
+              <thead class="text-xs uppercase text-stone-500 border-b">
+                <tr>
+                  <th class="py-2 pr-4">Crotal</th>
+                  <th class="py-2 pr-4">Nombre</th>
+                  <th class="py-2 pr-4">Sexo</th>
+                  <th class="py-2 pr-4">Raza</th>
+                  <th class="py-2 pr-4">Nacimiento</th>
+                  <th class="py-2 pr-4 col-ubicacion">Localización</th>
+                  <th class="py-2 pr-4 col-ubicacion">Lote</th>
+                  <th class="py-2 pr-4">Madre</th>
+                  <th class="py-2 pr-4">Crías</th>
+                  <th class="py-2 pr-4">Sanidad</th>
+                  <th class="py-2 pr-4">Estado</th>
+                  <th class="py-2 text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="vacas-body"></tbody>
+            </table>
+          </div>
+          <p id="vacas-empty" data-t="vacasEmpty" class="hidden text-center text-stone-500 py-8">No hay vacas que mostrar.</p>
+        </div>
+      </section>
+
+      <!-- ====== FINCAS Y MAPA ====== -->
+      <section id="tab-fincas" class="hidden space-y-6">
+        <div class="grid gap-6 lg:grid-cols-3">
+
+          <form id="finca-form" class="bg-white rounded-xl shadow p-5 lg:col-span-1 self-start space-y-4">
+            <div class="flex items-center justify-between">
+              <h2 id="finca-form-title" class="text-lg font-semibold">Añadir finca</h2>
+              <span id="finca-editando" class="hidden text-xs bg-amber-100 text-amber-800 rounded-full px-3 py-1">Modo edición</span>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium mb-1">Nombre *</label>
+              <input id="finca-nombre" required placeholder="Finca La Vega"
+                class="w-full rounded-lg border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-600" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Ubicación (texto)</label>
+              <input id="finca-ubicacion" placeholder="Luanco, Asturias"
+                class="w-full rounded-lg border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-600" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Lote de esta finca</label>
+              <input id="finca-lote" maxlength="80" placeholder="Lote Principal"
+                class="w-full rounded-lg border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-600" />
+              <p class="text-xs text-stone-500 mt-1">Cada lote pertenece a una sola finca: no puede repetirse en otra. Los animales de este lote solo podrán estar en esta finca.</p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Superficie (ha)</label>
+              <input id="finca-hectareas" type="number" min="0" step="0.01" placeholder="12.5"
+                class="w-full rounded-lg border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-600" />
+              <p class="text-xs text-stone-500 mt-1">Se calcula sola al dibujar el límite; puedes corregirla a mano.</p>
+            </div>
+
+            <div class="rounded-lg bg-stone-50 border border-stone-200 p-3 text-sm space-y-2">
+              <p class="font-medium">📍 Posición en el mapa</p>
+              <p id="geom-estado" class="text-stone-600">Sin ubicación en el mapa</p>
+              <ul class="text-xs text-stone-500 list-disc pl-4 space-y-0.5">
+                <li>Usa las herramientas de la izquierda del mapa: polígono, rectángulo o marcador.</li>
+                <li>Para ajustar un dibujo, usa el botón de edición (lápiz) del mapa.</li>
+              </ul>
+              <button id="btn-borrar-dibujo" type="button"
+                class="text-xs text-red-600 hover:underline">Quitar el dibujo actual</button>
+            </div>
+
+            <p id="finca-error" class="hidden text-sm text-red-600"></p>
+            <div class="flex flex-wrap gap-2">
+              <button id="finca-submit" type="submit"
+                class="bg-green-700 hover:bg-green-800 text-white font-semibold rounded-lg px-5 py-2 transition">
+                Añadir finca
+              </button>
+              <button id="finca-cancel" type="button"
+                class="hidden bg-stone-200 hover:bg-stone-300 text-stone-800 font-semibold rounded-lg px-5 py-2 transition">
+                Cancelar edición
+              </button>
+            </div>
+          </form>
+
+          <div class="lg:col-span-2 bg-white rounded-xl shadow p-3">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-2 px-2">
+              <h2 class="text-lg font-semibold">Mapa de fincas</h2>
+              <div class="flex flex-1 min-w-[14rem] max-w-md items-center gap-2">
+                <input id="buscar-finca" type="search" list="fincas-nombres" placeholder="Buscar finca por nombre…" aria-label="Buscar finca por nombre"
+                  class="w-full rounded-lg border border-stone-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
+                <datalist id="fincas-nombres"></datalist>
+                <button id="buscar-finca-ir" type="button"
+                  class="text-sm bg-green-700 hover:bg-green-800 text-white rounded-lg px-3 py-1.5 transition">Ir</button>
+              </div>
+              <button id="btn-ver-todas" type="button"
+                class="text-sm bg-green-100 hover:bg-green-200 text-green-900 rounded-lg px-3 py-1.5 transition">
+                Ver todas
+              </button>
+            </div>
+            <p id="buscar-finca-hint" class="text-xs text-amber-700 px-2 mb-1"></p>
+            <div id="mapa" class="w-full rounded-lg overflow-hidden bg-stone-200" style="height: 540px;"></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between gap-3 mb-3">
+            <h2 class="text-lg font-semibold">Mis fincas</h2>
+            <button id="btn-export-fincas" type="button"
+              class="text-sm bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-3 py-2 transition whitespace-nowrap">⬇ Exportar a Excel / CSV</button>
+          </div>
+          <div id="fincas-grid" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"></div>
+          <p id="fincas-empty" class="hidden text-center text-stone-500 py-8">Aún no has añadido ninguna finca.</p>
+        </div>
+      </section>
+
+      <!-- ====== CEBADEROS ====== -->
+      <section id="tab-cebaderos" class="hidden space-y-6">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div class="bg-white rounded-xl shadow p-4">
+            <p class="text-xs uppercase text-stone-500">En cebadero ahora</p>
+            <p id="stat-cebo-dentro" class="text-3xl font-bold text-green-800">0</p>
+          </div>
+          <div class="bg-white rounded-xl shadow p-4">
+            <p class="text-xs uppercase text-stone-500">Salidas registradas</p>
+            <p id="stat-cebo-salidas" class="text-3xl font-bold text-sky-700">0</p>
+          </div>
+          <div class="bg-white rounded-xl shadow p-4">
+            <p class="text-xs uppercase text-stone-500">Días medios de cebo</p>
+            <p id="stat-cebo-dias" class="text-3xl font-bold text-amber-600">—</p>
+          </div>
+          <div class="bg-white rounded-xl shadow p-4">
+            <p class="text-xs uppercase text-stone-500">Ganancia media diaria</p>
+            <p id="stat-cebo-gmd" class="text-3xl font-bold text-emerald-700">—</p>
+            <p id="stat-cebo-gmd-nota" class="text-xs text-stone-500">kg/día</p>
+          </div>
+        </div>
+
+        <div class="grid gap-6 lg:grid-cols-2">
+          <!-- Cebaderos de la explotación -->
+          <div class="bg-white rounded-xl shadow p-5 space-y-4">
+            <h2 class="text-lg font-semibold">🏠 Cebaderos</h2>
+            <form id="cebadero-form" class="grid gap-3 sm:grid-cols-3">
+              <div class="sm:col-span-3">
+                <label class="block text-sm font-medium mb-1" for="cebadero-nombre">Nombre *</label>
+                <input id="cebadero-nombre" maxlength="120" placeholder="Cebadero de abajo"
+                  class="w-full rounded-lg border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-600" />
+              </div>
+              <div class="sm:col-span-2">
+                <label class="block text-sm font-medium mb-1" for="cebadero-ubicacion">Ubicación</label>
+                <input id="cebadero-ubicacion" maxlength="200" placeholder="Parroquia, concello…"
+                  class="w-full rounded-lg border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-600" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium mb-1" for="cebadero-capacidad">Plazas</label>
+                <input id="cebadero-capacidad" type="number" min="1" step="1" placeholder="40"
+                  class="w-full rounded-lg border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-600" />
+              </div>
+              <p id="cebadero-error" class="hidden sm:col-span-3 text-sm text-red-600"></p>
+              <div class="sm:col-span-3 flex gap-2">
+                <button id="cebadero-submit" type="submit"
+                  class="bg-green-700 hover:bg-green-800 text-white font-semibold rounded-lg px-4 py-2 text-sm transition">Añadir cebadero</button>
+                <button id="cebadero-cancel" type="button"
+                  class="hidden bg-stone-200 hover:bg-stone-300 text-stone-800 font-semibold rounded-lg px-4 py-2 text-sm transition">Cancelar</button>
+              </div>
+            </form>
+            <div id="cebaderos-lista" class="grid gap-3"></div>
+          </div>
+
+          <!-- Entrada / salida de un animal -->
+          <div id="cebo-form-card" class="bg-white rounded-xl shadow p-5">
+            <h2 id="cebo-form-titulo" class="text-lg font-semibold mb-4">Registrar entrada</h2>
+            <form id="cebo-form" class="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label class="block text-sm font-medium mb-1" for="cebo-cebadero">Cebadero *</label>
+                <select id="cebo-cebadero"
+                  class="w-full rounded-lg border border-stone-300 px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-600"></select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium mb-1" for="cebo-animal">Ternero / ternera *</label>
+                <select id="cebo-animal"
+                  class="w-full rounded-lg border border-stone-300 px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-600"></select>
+                <p id="cebo-animal-hint" class="text-xs text-stone-500 mt-1"></p>
+              </div>
+              <div>
+                <label class="block text-sm font-medium mb-1" for="cebo-entrada">Fecha de entrada *</label>
+                <input id="cebo-entrada" type="date"
+                  class="w-full rounded-lg border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-600" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium mb-1" for="cebo-peso-entrada">Peso de entrada (kg)</label>
+                <input id="cebo-peso-entrada" type="number" min="0" step="0.1" placeholder="180"
+                  class="w-full rounded-lg border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-600" />
+              </div>
+              <div id="cebo-salida-wrap" class="hidden sm:col-span-2 grid gap-3 sm:grid-cols-2 rounded-lg bg-emerald-50 border border-emerald-200 p-3">
+                <div>
+                  <label class="block text-sm font-medium mb-1" for="cebo-salida">Fecha de salida</label>
+                  <input id="cebo-salida" type="date"
+                    class="w-full rounded-lg border border-stone-300 px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-600" />
+                </div>
+                <div>
+                  <label class="block text-sm font-medium mb-1" for="cebo-peso-salida">Peso de salida (kg)</label>
+                  <input id="cebo-peso-salida" type="number" min="0" step="0.1" placeholder="520"
+                    class="w-full rounded-lg border border-stone-300 px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-600" />
+                </div>
+                <div id="cebo-destino-wrap" class="sm:col-span-2">
+                  <label class="block text-sm font-medium mb-1" for="cebo-destino">Al salir pasa a la finca</label>
+                  <select id="cebo-destino"
+                    class="w-full rounded-lg border border-stone-300 px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-600"></select>
+                </div>
+                <p class="sm:col-span-2 text-xs text-stone-600">Mientras está en el cebadero el animal no está en ninguna finca. Con los dos pesos se calcula la ganancia media diaria. Si sale vendido o a matadero, regístralo también con «Dar de baja».</p>
+              </div>
+              <div class="sm:col-span-2">
+                <label class="block text-sm font-medium mb-1" for="cebo-obs">Observaciones</label>
+                <input id="cebo-obs" maxlength="500" placeholder="Pienso, origen, incidencias…"
+                  class="w-full rounded-lg border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-600" />
+              </div>
+              <p id="cebo-error" class="hidden sm:col-span-2 text-sm text-red-600"></p>
+              <div class="sm:col-span-2 flex gap-2">
+                <button id="cebo-submit" type="submit"
+                  class="bg-green-700 hover:bg-green-800 text-white font-semibold rounded-lg px-4 py-2 text-sm transition">Registrar entrada</button>
+                <button id="cebo-cancel" type="button"
+                  class="hidden bg-stone-200 hover:bg-stone-300 text-stone-800 font-semibold rounded-lg px-4 py-2 text-sm transition">Cancelar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <!-- En el cebadero ahora -->
+        <div class="bg-white rounded-xl shadow p-5">
+          <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <h2 class="text-lg font-semibold">En el cebadero ahora <span id="cebo-actual-total" class="text-sm font-normal text-stone-500"></span></h2>
+            <div class="flex flex-wrap items-center gap-2">
+              <input id="cebo-actual-buscar" type="search" placeholder="Buscar crotal o nombre…"
+                class="w-56 rounded-lg border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
+              <select id="cebo-actual-cebadero"
+                class="rounded-lg border border-stone-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-600"></select>
+            </div>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm text-left">
+              <thead class="text-xs uppercase text-stone-500 border-b">
+                <tr>
+                  <th class="py-2 pr-4">Animal</th>
+                  <th class="py-2 pr-4">Sexo / raza</th>
+                  <th class="py-2 pr-4">Cebadero</th>
+                  <th class="py-2 pr-4">Entrada</th>
+                  <th class="py-2 pr-4 text-right">Kg entrada</th>
+                  <th class="py-2 pr-4 text-right">Días dentro</th>
+                  <th class="py-2 text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="cebo-actual-body"></tbody>
+            </table>
+            <p id="cebo-actual-vacio" class="text-sm text-stone-500 py-4 text-center"></p>
+          </div>
+        </div>
+
+        <!-- Histórico: terneros que ya salieron -->
+        <div class="bg-white rounded-xl shadow p-5">
+          <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+            <h2 class="text-lg font-semibold">Histórico</h2>
+            <button id="btn-export-cebo" type="button"
+              class="text-sm bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-3 py-2 transition whitespace-nowrap">⬇ Exportar a Excel / CSV</button>
+          </div>
+          <div class="flex flex-wrap items-center gap-2 mb-3">
+            <input id="cebo-buscar" type="search" placeholder="Buscar crotal o nombre…"
+              class="w-56 rounded-lg border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
+            <select id="cebo-filtro-cebadero"
+              class="rounded-lg border border-stone-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-600"></select>
+            <label class="text-sm text-stone-600 ml-1" for="cebo-desde">Desde</label>
+            <input id="cebo-desde" type="month"
+              class="w-44 rounded-lg border border-stone-300 px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-600" />
+            <label class="text-sm text-stone-600" for="cebo-hasta">hasta</label>
+            <input id="cebo-hasta" type="month"
+              class="w-44 rounded-lg border border-stone-300 px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-600" />
+            <button id="cebo-periodo-limpiar" type="button"
+              class="text-sm text-stone-600 hover:text-stone-900 hover:underline">Quitar fechas</button>
+          </div>
+          <p id="cebo-resumen" class="text-sm text-stone-600 mb-3"></p>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm text-left">
+              <thead class="text-xs uppercase text-stone-500 border-b">
+                <tr>
+                  <th class="py-2 pr-4">Animal</th>
+                  <th class="py-2 pr-4">Sexo / raza</th>
+                  <th class="py-2 pr-4">Cebadero</th>
+                  <th class="py-2 pr-4">Entrada</th>
+                  <th class="py-2 pr-4">Salida</th>
+                  <th class="py-2 pr-4 text-right">Kg entrada</th>
+                  <th class="py-2 pr-4 text-right">Kg salida</th>
+                  <th class="py-2 pr-4 text-right">Días</th>
+                  <th class="py-2 pr-4 text-right">Kg ganados</th>
+                  <th class="py-2 pr-4 text-right">GMD (kg/día)</th>
+                  <th class="py-2 text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="cebo-body"></tbody>
+            </table>
+            <p id="cebo-vacio" class="text-sm text-stone-500 py-4 text-center"></p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====== ECONOMÍA (solo ganadero) ====== -->
+      <section id="tab-economia" class="hidden space-y-6">
+        <p id="eco-aviso-nube" class="hidden text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          ⚠️ La economía se está guardando solo en este navegador: en Supabase falta la tabla de economía.
+          Ejecuta <span class="font-mono">migracion_04_economia.sql</span> en el SQL Editor y se subirá sola.
+        </p>
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <h2 class="text-lg font-semibold">💶 Economía de la explotación</h2>
+          <div class="flex flex-wrap items-center gap-2">
+            <select id="eco-anio" aria-label="Año"
+              class="rounded-lg border border-stone-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-600"></select>
+            <select id="eco-mes" aria-label="Mes"
+              class="rounded-lg border border-stone-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-600"></select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="bg-white rounded-xl shadow p-4">
+            <p class="text-xs uppercase text-stone-500">Ingresos <span class="eco-periodo"></span></p>
+            <p id="eco-ingresos" class="text-3xl font-bold text-emerald-700">0 €</p>
+          </div>
+          <div class="bg-white rounded-xl shadow p-4">
+            <p class="text-xs uppercase text-stone-500">Gastos <span class="eco-periodo"></span></p>
+            <p id="eco-gastos" class="text-3xl font-bold text-red-600">0 €</p>
+          </div>
+          <div class="bg-white rounded-xl shadow p-4">
+            <p class="text-xs uppercase text-stone-500">Balance <span class="eco-periodo"></span></p>
+            <p id="eco-balance" class="text-3xl font-bold text-stone-800">0 €</p>
+          </div>
+        </div>
+
+        <!-- Mes a mes -->
+        <div class="bg-white rounded-xl shadow p-5">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+            <h3 id="eco-grafica-titulo" class="font-semibold">Mes a mes</h3>
+            <div class="flex items-center gap-4 text-xs text-stone-600">
+              <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm bg-emerald-600"></span>Ingresos</span>
+              <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm bg-red-500"></span>Gastos</span>
+            </div>
+          </div>
+          <div id="eco-grafica" class="grid grid-cols-12 gap-1 sm:gap-2 items-end"></div>
+        </div>
+
+        <div class="grid gap-6 lg:grid-cols-2">
+          <!-- Añadir / editar -->
+          <div class="bg-white rounded-xl shadow p-5">
+            <h3 id="eco-form-titulo" class="font-semibold mb-4">Añadir gasto o ingreso</h3>
+            <form id="eco-form" class="grid gap-3 sm:grid-cols-2" novalidate>
+              <div class="sm:col-span-2 grid grid-cols-2 rounded-lg bg-stone-100 p-1 text-sm font-medium" role="radiogroup" aria-label="Tipo">
+                <button type="button" data-eco-tipo="gasto" class="eco-tipo-btn rounded-md py-2 transition">➖ Gasto</button>
+                <button type="button" data-eco-tipo="ingreso" class="eco-tipo-btn rounded-md py-2 transition">➕ Ingreso</button>
+              </div>
+              <div>
+                <label class="block text-sm font-medium mb-1" for="eco-fecha">Fecha *</label>
+                <input id="eco-fecha" type="date"
+                  class="w-full rounded-lg border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-600" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium mb-1" for="eco-importe">Importe (€) *</label>
+                <input id="eco-importe" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0,00"
+                  class="w-full rounded-lg border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-600" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium mb-1" for="eco-categoria">Categoría *</label>
+                <select id="eco-categoria"
+                  class="w-full rounded-lg border border-stone-300 px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-600"></select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium mb-1" for="eco-animal">Animal (opcional)</label>
+                <select id="eco-animal"
+                  class="w-full rounded-lg border border-stone-300 px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-600"></select>
+              </div>
+              <div id="eco-cebadero-wrap" class="sm:col-span-2">
+                <label class="block text-sm font-medium mb-1" for="eco-cebadero">Gasto de un cebadero (opcional)</label>
+                <select id="eco-cebadero"
+                  class="w-full rounded-lg border border-stone-300 px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-600"></select>
+                <p class="text-xs text-stone-500 mt-1">Pienso, paja, luz del cebadero…: se reparte entre los terneros que había dentro ese mes.</p>
+              </div>
+              <div class="sm:col-span-2">
+                <label class="block text-sm font-medium mb-1" for="eco-concepto">Concepto</label>
+                <input id="eco-concepto" maxlength="200" placeholder="20 sacos de pienso, factura de la luz…"
+                  class="w-full rounded-lg border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-600" />
+              </div>
+              <p id="eco-error" class="hidden sm:col-span-2 text-sm text-red-600"></p>
+              <div class="sm:col-span-2 flex gap-2">
+                <button id="eco-submit" type="submit"
+                  class="bg-green-700 hover:bg-green-800 text-white font-semibold rounded-lg px-4 py-2 text-sm transition">Añadir</button>
+                <button id="eco-cancel" type="button"
+                  class="hidden bg-stone-200 hover:bg-stone-300 text-stone-800 font-semibold rounded-lg px-4 py-2 text-sm transition">Cancelar</button>
+              </div>
+              <p class="sm:col-span-2 text-xs text-stone-500">Las ventas y los sacrificios se anotan solos si pones el importe al dar de baja el animal.</p>
+            </form>
+          </div>
+
+          <!-- Por categoría -->
+          <div class="bg-white rounded-xl shadow p-5 space-y-5">
+            <div>
+              <h3 class="font-semibold mb-2">Gastos por categoría <span class="eco-periodo text-sm font-normal text-stone-500"></span></h3>
+              <div id="eco-cat-gastos" class="space-y-2"></div>
+            </div>
+            <div>
+              <h3 class="font-semibold mb-2">Ingresos por categoría <span class="eco-periodo text-sm font-normal text-stone-500"></span></h3>
+              <div id="eco-cat-ingresos" class="space-y-2"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Movimientos -->
+        <div class="bg-white rounded-xl shadow p-5">
+          <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+            <h3 class="font-semibold">Movimientos <span class="eco-periodo text-sm font-normal text-stone-500"></span></h3>
+            <div class="flex flex-wrap items-center gap-2">
+              <input id="eco-buscar" type="search" placeholder="Buscar concepto o crotal…"
+                class="w-56 rounded-lg border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
+              <select id="eco-filtro-tipo"
+                class="rounded-lg border border-stone-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-600">
+                <option value="">Gastos e ingresos</option>
+                <option value="gasto">Solo gastos</option>
+                <option value="ingreso">Solo ingresos</option>
+              </select>
+              <button id="btn-export-eco" type="button"
+                class="text-sm bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-3 py-2 transition whitespace-nowrap">⬇ Exportar a Excel / CSV</button>
+            </div>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm text-left">
+              <thead class="text-xs uppercase text-stone-500 border-b">
+                <tr>
+                  <th class="py-2 pr-4">Fecha</th>
+                  <th class="py-2 pr-4">Tipo</th>
+                  <th class="py-2 pr-4">Categoría</th>
+                  <th class="py-2 pr-4">Concepto</th>
+                  <th class="py-2 pr-4">Animal</th>
+                  <th class="py-2 pr-4 text-right">Importe</th>
+                  <th class="py-2 text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="eco-body"></tbody>
+            </table>
+            <p id="eco-vacio" class="text-sm text-stone-500 py-4 text-center"></p>
+          </div>
+        </div>
+        <!-- Rentabilidad por ternero y por toro -->
+        <div class="bg-white rounded-xl shadow p-5">
+          <h3 class="font-semibold">🐂 Rentabilidad por animal</h3>
+          <p class="text-xs text-stone-500 mb-3">Ingresos menos gastos de cada animal (todo su historial). Los gastos ligados a un cebadero se reparten entre los terneros que había dentro ese mes, según los días de cada uno.</p>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm text-left">
+              <thead class="text-xs uppercase text-stone-500 border-b">
+                <tr>
+                  <th class="py-2 pr-4">Animal</th>
+                  <th class="py-2 pr-4">Padre</th>
+                  <th class="py-2 pr-4 text-right">Días cebo</th>
+                  <th class="py-2 pr-4 text-right">Kg ganados</th>
+                  <th class="py-2 pr-4 text-right">Ingresos</th>
+                  <th class="py-2 pr-4 text-right">Gastos</th>
+                  <th class="py-2 text-right">Balance</th>
+                </tr>
+              </thead>
+              <tbody id="renta-body"></tbody>
+            </table>
+            <p id="renta-vacio" class="text-sm text-stone-500 py-3 text-center">Liga gastos e ingresos a tus animales o a un cebadero para ver aquí lo que te deja cada uno.</p>
+          </div>
+          <p id="renta-nota" class="text-xs text-amber-800 mt-2"></p>
+          <h3 class="font-semibold mt-5 mb-2">Por toro (padre)</h3>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm text-left">
+              <thead class="text-xs uppercase text-stone-500 border-b">
+                <tr>
+                  <th class="py-2 pr-4">Padre</th>
+                  <th class="py-2 pr-4 text-right">Terneros</th>
+                  <th class="py-2 pr-4 text-right">GMD media</th>
+                  <th class="py-2 text-right">Balance medio</th>
+                </tr>
+              </thead>
+              <tbody id="renta-padres"></tbody>
+            </table>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ====== HISTÓRICO DE BAJAS ====== -->
+      <section id="tab-bajas" class="hidden space-y-6">
+        <!-- Libro de registro (solo ganadero) -->
+        <div class="solo-ganadero bg-white rounded-xl shadow p-5">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 class="text-lg font-semibold">📘 Libro de registro</h2>
+              <p class="text-xs text-stone-500">Nacimientos, entradas y salidas de fincas y cebaderos, cambios de lote y bajas del año, con sus documentos.</p>
+              <p id="libro-resumen" class="text-sm text-stone-700 mt-1"></p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <select id="libro-anio" aria-label="Año del libro"
+                class="rounded-lg border border-stone-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-600"></select>
+              <button id="libro-imprimir" type="button" class="bg-green-700 hover:bg-green-800 text-white rounded-lg px-3 py-2 text-sm">🖨 Imprimir / PDF</button>
+              <button id="libro-csv" type="button" class="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-3 py-2 text-sm">⬇ Excel / CSV</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div class="bg-white rounded-xl shadow p-4">
+            <p class="text-xs uppercase text-stone-500">Total de bajas</p>
+            <p id="stat-bajas-total" class="text-3xl font-bold text-stone-800">0</p>
+          </div>
+          <div class="bg-white rounded-xl shadow p-4">
+            <p class="text-xs uppercase text-stone-500">Ventas</p>
+            <p id="stat-bajas-venta" class="text-3xl font-bold text-sky-700">0</p>
+          </div>
+          <div class="bg-white rounded-xl shadow p-4">
+            <p class="text-xs uppercase text-stone-500">Sacrificios</p>
+            <p id="stat-bajas-sacrificio" class="text-3xl font-bold text-amber-600">0</p>
+          </div>
+          <div class="bg-white rounded-xl shadow p-4">
+            <p class="text-xs uppercase text-stone-500">Fallecimientos</p>
+            <p id="stat-bajas-fallecimiento" class="text-3xl font-bold text-stone-600">0</p>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow p-5">
+          <div class="flex flex-col xl:flex-row gap-3 xl:items-center xl:justify-between mb-4">
+            <div>
+              <h2 class="text-lg font-semibold">Histórico de bajas</h2>
+              <p class="text-xs text-stone-500">Libro de explotación: ventas, sacrificios y fallecimientos. Las bajas no se borran; si te equivocas, puedes reactivar al animal.</p>
+            </div>
+            <div class="flex flex-col sm:flex-row gap-2">
+              <input id="baja-buscar" type="search" data-ph="buscarBaja" placeholder="Buscar crotal, nombre, destino…"
+                class="rounded-lg border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
+              <select id="baja-filtro-motivo"
+                class="rounded-lg border border-stone-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-600">
+                <option value="">Todos los motivos</option>
+                <option value="Venta">Venta</option>
+                <option value="Sacrificio">Sacrificio</option>
+                <option value="Fallecimiento">Fallecimiento</option>
+              </select>
+              <select id="baja-filtro-anio"
+                class="rounded-lg border border-stone-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-600"></select>
+              <button id="btn-export-bajas" type="button"
+                class="text-sm bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-3 py-2 transition whitespace-nowrap">⬇ Exportar a Excel / CSV</button>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm text-left">
+              <thead class="text-xs uppercase text-stone-500 border-b">
+                <tr>
+                  <th class="py-2 pr-4">Fecha</th>
+                  <th class="py-2 pr-4">Motivo</th>
+                  <th class="py-2 pr-4">Crotal</th>
+                  <th class="py-2 pr-4">Nombre</th>
+                  <th class="py-2 pr-4">Raza</th>
+                  <th class="py-2 pr-4 col-ubicacion">Finca</th>
+                  <th class="py-2 pr-4 col-ubicacion">Lote</th>
+                  <th class="py-2 pr-4">Destino / causa</th>
+                  <th class="py-2 pr-4">Documento</th>
+                  <th class="py-2 text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="bajas-body"></tbody>
+            </table>
+          </div>
+          <p id="bajas-empty" class="hidden text-center text-stone-500 py-8">No hay bajas registradas.</p>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Sugerencias de lotes (se rellena desde app.js) -->
+  <datalist id="lotes-list"></datalist>
+
+  <!-- ============ MODAL: VACAS DE UN LOTE ============ -->
+  <div id="lote-modal" class="hidden fixed inset-0 z-50 items-center justify-center p-4 bg-black/50"
+       role="dialog" aria-modal="true" aria-labelledby="lote-modal-titulo">
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[85vh] flex flex-col">
+      <div class="flex items-start justify-between gap-3 p-5 border-b">
+        <div>
+          <h2 id="lote-modal-titulo" class="text-xl font-bold text-green-800"></h2>
+          <p id="lote-modal-resumen" class="text-sm text-stone-600 mt-1"></p>
+        </div>
+        <button id="lote-modal-x" type="button" aria-label="Cerrar"
+          class="text-stone-500 hover:text-stone-800 text-2xl leading-none px-2">&times;</button>
+      </div>
+
+      <div class="overflow-auto p-5">
+        <table class="w-full text-sm text-left">
+          <thead class="text-xs uppercase text-stone-500 border-b">
+            <tr>
+              <th class="py-2 pr-4">Crotal</th>
+              <th class="py-2 pr-4">Nombre</th>
+              <th class="py-2 pr-4">Raza</th>
+              <th class="py-2 pr-4">Finca</th>
+              <th class="py-2">Estado</th>
+            </tr>
+          </thead>
+          <tbody id="lote-modal-body"></tbody>
+        </table>
+        <p id="lote-modal-vacio" data-t="loteVacio" class="hidden text-center text-stone-500 py-8">Este lote no tiene vacas todavía.</p>
+      </div>
+
+      <div class="p-4 border-t flex flex-wrap justify-end gap-2">
+        <button id="lote-modal-filtrar" type="button"
+          class="hidden bg-green-100 hover:bg-green-200 text-green-900 font-semibold rounded-lg px-4 py-2 text-sm transition">
+          Filtrar en Vacas
+        </button>
+        <button id="lote-modal-cerrar" type="button"
+          class="bg-stone-200 hover:bg-stone-300 text-stone-800 font-semibold rounded-lg px-4 py-2 text-sm transition">
+          Cerrar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ MODAL: DAR DE BAJA ============ -->
+  <div id="baja-modal" class="hidden fixed inset-0 z-50 items-center justify-center p-4 bg-black/50"
+       role="dialog" aria-modal="true" aria-labelledby="baja-modal-titulo">
+    <form id="baja-form" class="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-auto">
+      <div class="p-5 border-b">
+        <h2 id="baja-modal-titulo" class="text-xl font-bold text-red-700">Dar de baja</h2>
+        <p id="baja-modal-vaca" class="text-sm text-stone-600 mt-1"></p>
+      </div>
+
+      <div class="p-5 space-y-4">
+        <div class="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label class="block text-sm font-medium mb-1">Motivo *</label>
+            <select id="baja-motivo"
+              class="w-full rounded-lg border border-stone-300 px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-600">
+              <option value="Venta">Venta</option>
+              <option value="Sacrificio">Sacrificio</option>
+              <option value="Fallecimiento">Fallecimiento</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Fecha de la baja *</label>
+            <input id="baja-fecha" type="date"
+              class="w-full rounded-lg border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-600" />
+          </div>
+        </div>
+        <div>
+          <label id="baja-detalle-label" class="block text-sm font-medium mb-1">Comprador / destino</label>
+          <input id="baja-detalle" placeholder="Nombre, matadero, causa…"
+            class="w-full rounded-lg border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-600" />
+        </div>
+        <div id="baja-importe-wrap">
+          <label id="baja-importe-label" class="block text-sm font-medium mb-1" for="baja-importe">Importe de la venta (€)</label>
+          <input id="baja-importe" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Opcional: se anota como ingreso"
+            class="w-full rounded-lg border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-600" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Nº de documento (opcional)</label>
+          <input id="baja-doc" placeholder="Guía de movimiento, certificado veterinario…"
+            class="w-full rounded-lg border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-600" />
+        </div>
+        <p id="baja-aviso" class="hidden text-sm text-amber-800 bg-amber-50 rounded-lg px-3 py-2"></p>
+        <p id="baja-error" class="hidden text-sm text-red-600"></p>
+        <p class="text-xs text-stone-500">El animal sale del listado activo y queda en el «Histórico de bajas» con todo su historial (tratamientos, movimientos y genealogía).</p>
+      </div>
+
+      <div class="p-4 border-t flex justify-end gap-2">
+        <button id="baja-cancelar" type="button"
+          class="bg-stone-200 hover:bg-stone-300 text-stone-800 font-semibold rounded-lg px-4 py-2 text-sm transition">Cancelar</button>
+        <button type="submit"
+          class="bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg px-4 py-2 text-sm transition">Confirmar baja</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ============ MODAL: TRATAMIENTO EN GRUPO (veterinario) ============ -->
+  <div id="grupo-modal" class="hidden fixed inset-0 z-50 items-center justify-center p-4 bg-black/50"
+       role="dialog" aria-modal="true" aria-labelledby="grupo-titulo">
+    <form id="grupo-form" class="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[92vh] flex flex-col" novalidate>
+      <div class="p-5 border-b">
+        <h2 id="grupo-titulo" class="text-xl font-bold text-green-800">💉 Tratamiento o vacuna en grupo</h2>
+        <p class="text-sm text-stone-600 mt-1">Marca los animales y se registrará el mismo tratamiento en todos.</p>
+      </div>
+      <div class="overflow-auto p-5 space-y-4">
+        <div class="flex flex-wrap items-center gap-2">
+          <input id="grupo-buscar" type="search" placeholder="Buscar crotal, nombre o raza…"
+            class="flex-1 min-w-[12rem] rounded-lg border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
+          <select id="grupo-estado"
+            class="rounded-lg border border-stone-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-600"></select>
+          <button id="grupo-todos" type="button" class="bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-lg px-3 py-2 text-sm">Marcar / desmarcar todos</button>
+        </div>
+        <div id="grupo-lista" class="max-h-56 overflow-auto rounded-lg border border-stone-200 px-3 py-1 columns-1 sm:columns-2"></div>
+        <p id="grupo-cuenta" class="text-sm font-medium text-stone-700"></p>
+        <div class="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label class="block text-xs font-medium mb-1" for="grupo-fecha">Fecha *</label>
+            <input id="grupo-fecha" type="date" class="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium mb-1" for="grupo-tipo">Tratamiento / vacuna *</label>
+            <input id="grupo-tipo" list="tratamientos-list" placeholder="Vacuna Lengua Azul…" class="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium mb-1" for="grupo-vet">Veterinario / responsable</label>
+            <input id="grupo-vet" maxlength="120" class="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-xs font-medium mb-1" for="grupo-ret-carne">Retirada carne (días)</label>
+              <input id="grupo-ret-carne" type="number" min="0" max="999" step="1" placeholder="0" class="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium mb-1" for="grupo-ret-leche">Retirada leche (días)</label>
+              <input id="grupo-ret-leche" type="number" min="0" max="999" step="1" placeholder="0" class="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+            </div>
+          </div>
+          <div class="sm:col-span-2">
+            <label class="block text-xs font-medium mb-1" for="grupo-obs">Observaciones</label>
+            <input id="grupo-obs" maxlength="1000" placeholder="Dosis, lote del producto…" class="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+          </div>
+        </div>
+        <p id="grupo-error" class="hidden text-sm text-red-600"></p>
+      </div>
+      <div class="p-4 border-t flex justify-end gap-2">
+        <button id="grupo-cancelar" type="button" class="bg-stone-200 hover:bg-stone-300 text-stone-800 font-semibold rounded-lg px-4 py-2 text-sm">Cancelar</button>
+        <button type="submit" class="bg-green-700 hover:bg-green-800 text-white font-semibold rounded-lg px-4 py-2 text-sm">Registrar en todos</button>
+      </div>
+    </form>
+  </div>
+  <input id="foto-archivo" type="file" accept="image/*" class="hidden" />
+
+  <!-- ============ MODAL: ÁRBOL GENEALÓGICO (por encima de la ficha) ============ -->
+  <div id="arbol-modal" class="hidden fixed inset-0 z-[60] items-center justify-center p-4 bg-black/50"
+       role="dialog" aria-modal="true" aria-labelledby="arbol-modal-titulo">
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-6xl max-h-[92vh] flex flex-col">
+      <div class="flex items-start justify-between gap-3 p-5 border-b">
+        <div>
+          <h2 id="arbol-modal-titulo" class="text-xl font-bold text-green-800"></h2>
+          <p class="text-xs text-stone-500 mt-1">Pulsa cualquier animal para centrar el árbol en él.</p>
+        </div>
+        <button id="arbol-modal-x" type="button" aria-label="Cerrar"
+          class="text-stone-500 hover:text-stone-800 text-2xl leading-none px-2">&times;</button>
+      </div>
+      <div id="arbol-modal-body" class="overflow-auto p-5 space-y-6">
+        <section>
+          <h3 class="font-semibold mb-3">Ascendencia</h3>
+          <div class="overflow-x-auto pb-2"><div id="arbol-ascendencia" class="inline-block"></div></div>
+        </section>
+        <section class="border-t pt-5">
+          <h3 id="arbol-desc-titulo" class="font-semibold mb-3">Descendencia</h3>
+          <div id="arbol-descendencia" class="overflow-x-auto pb-2"></div>
+        </section>
+      </div>
+      <div class="p-4 border-t flex flex-wrap justify-end gap-2">
+        <button id="arbol-modal-ficha" type="button"
+          class="bg-green-700 hover:bg-green-800 text-white font-semibold rounded-lg px-4 py-2 text-sm transition">Ver ficha</button>
+        <button id="arbol-modal-cerrar" type="button"
+          class="bg-stone-200 hover:bg-stone-300 text-stone-800 font-semibold rounded-lg px-4 py-2 text-sm transition">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ MODAL: FICHA INDIVIDUAL DEL ANIMAL ============ -->
+  <div id="vaca-modal" class="hidden fixed inset-0 z-50 items-center justify-center p-4 bg-black/50"
+       role="dialog" aria-modal="true" aria-labelledby="vaca-modal-titulo">
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+      <div class="flex items-start justify-between gap-3 p-5 border-b">
+        <div>
+          <h2 id="vaca-modal-titulo" class="text-xl font-bold text-green-800"></h2>
+          <span id="vaca-modal-estado" class="inline-block mt-1"></span>
+        </div>
+        <button id="vaca-modal-x" type="button" aria-label="Cerrar"
+          class="text-stone-500 hover:text-stone-800 text-2xl leading-none px-2">&times;</button>
+      </div>
+
+      <div id="vaca-modal-body" class="overflow-auto p-5 space-y-5">
+        <!-- Datos identificativos, estado reproductivo, genealogía y movimientos (se rellena desde app.js) -->
+        <div id="vaca-modal-ficha" class="space-y-5"></div>
+
+        <!-- Actualizar estado, finca y lote (con las mismas validaciones que el formulario) -->
+        <section id="ficha-sit-seccion" class="border-t pt-5">
+          <h3 class="font-semibold mb-3">🔄 Actualizar estado, finca y lote</h3>
+          <form id="ficha-sit-form" class="rounded-lg bg-sky-50 border border-sky-200 p-3 space-y-3">
+            <div class="grid gap-3 sm:grid-cols-3">
+              <div>
+                <label class="block text-xs font-medium mb-1" for="ficha-sit-estado">Estado</label>
+                <select id="ficha-sit-estado"
+                  class="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-600"></select>
+              </div>
+              <div>
+                <label class="block text-xs font-medium mb-1" for="ficha-sit-finca">Finca</label>
+                <select id="ficha-sit-finca"
+                  class="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-600"></select>
+              </div>
+              <div>
+                <label class="block text-xs font-medium mb-1" for="ficha-sit-lote">Lote</label>
+                <select id="ficha-sit-lote"
+                  class="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-600"></select>
+              </div>
+            </div>
+            <div id="ficha-sit-mov-wrap" class="hidden max-w-xs">
+              <label class="block text-xs font-medium mb-1" for="ficha-sit-fecha">Fecha del movimiento</label>
+              <input id="ficha-sit-fecha" type="date"
+                class="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-600" />
+            </div>
+            <p id="ficha-sit-hint" class="text-xs text-stone-500"></p>
+            <p id="ficha-sit-error" class="hidden text-sm text-red-600"></p>
+            <p id="ficha-sit-ok" class="hidden text-sm text-green-700 bg-green-50 rounded-lg px-3 py-2"></p>
+            <button type="submit"
+              class="bg-sky-700 hover:bg-sky-800 text-white font-semibold rounded-lg px-4 py-2 text-sm transition">
+              Guardar cambios
+            </button>
+          </form>
+        </section>
+
+        <!-- Historial sanitario -->
+        <section id="trat-seccion" class="border-t pt-5">
+          <h3 id="trat-titulo" class="font-semibold mb-3">💉 Tratamientos sanitarios / Vacunas</h3>
+
+          <p id="trat-aviso-ganadero" class="hidden text-sm text-sky-900 bg-sky-50 border border-sky-200 rounded-lg px-3 py-2">
+            🩺 Los tratamientos y vacunas los registra tu veterinario. Aquí puedes consultarlos. Si aún no lo has hecho, invítalo desde «Mi perfil» (👤).
+          </p>
+          <form id="trat-form" class="rounded-lg bg-stone-50 border border-stone-200 p-3 space-y-3">
+            <p class="text-sm font-medium">Añadir tratamiento</p>
+            <div class="grid gap-3 sm:grid-cols-3">
+              <div>
+                <label class="block text-xs font-medium mb-1">Fecha *</label>
+                <input id="trat-fecha" type="date" required
+                  class="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
+              </div>
+              <div class="sm:col-span-2">
+                <label class="block text-xs font-medium mb-1">Tipo / nombre del tratamiento *</label>
+                <input id="trat-tipo" list="tratamientos-list" required placeholder="Vacuna Lengua Azul, Desparasitación, Antibiótico…"
+                  class="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
+                <datalist id="tratamientos-list"></datalist>
+              </div>
+              <div>
+                <label class="block text-xs font-medium mb-1">Veterinario / responsable</label>
+                <input id="trat-vet" placeholder="Dr. Martínez"
+                  class="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="block text-xs font-medium mb-1" for="trat-ret-carne">Retirada carne (días)</label>
+                  <input id="trat-ret-carne" type="number" min="0" max="999" step="1" placeholder="0"
+                    class="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
+                </div>
+                <div>
+                  <label class="block text-xs font-medium mb-1" for="trat-ret-leche">Retirada leche (días)</label>
+                  <input id="trat-ret-leche" type="number" min="0" max="999" step="1" placeholder="0"
+                    class="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
+                </div>
+              </div>
+              <div class="sm:col-span-3">
+                <label class="block text-xs font-medium mb-1">Observaciones</label>
+                <input id="trat-obs" placeholder="Dosis, lote del producto, reacción, retirada de leche…"
+                  class="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
+              </div>
+            </div>
+            <p class="text-xs text-stone-500">Una fecha futura deja el tratamiento como «Programado» en la ficha y en la agenda clínica.</p>
+            <p id="trat-error" class="hidden text-sm text-red-600"></p>
+            <button type="submit"
+              class="bg-green-700 hover:bg-green-800 text-white font-semibold rounded-lg px-4 py-2 text-sm transition">
+              Añadir tratamiento
+            </button>
+          </form>
+
+          <div id="trat-lista" class="mt-3"></div>
+        </section>
+      </div>
+
+      <div class="p-4 border-t flex flex-wrap justify-end gap-2">
+        <button id="vaca-modal-cria" type="button"
+          class="bg-green-700 hover:bg-green-800 text-white font-semibold rounded-lg px-4 py-2 text-sm transition">
+          ➕ Añadir cría
+        </button>
+        <button id="vaca-modal-baja" type="button"
+          class="bg-red-100 hover:bg-red-200 text-red-800 font-semibold rounded-lg px-4 py-2 text-sm transition">
+          Dar de baja
+        </button>
+        <button id="vaca-modal-editar" type="button"
+          class="bg-blue-100 hover:bg-blue-200 text-blue-900 font-semibold rounded-lg px-4 py-2 text-sm transition">
+          Editar
+        </button>
+        <button id="vaca-modal-cerrar" type="button"
+          class="bg-stone-200 hover:bg-stone-300 text-stone-800 font-semibold rounded-lg px-4 py-2 text-sm transition">
+          Cerrar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ MODAL: PERFIL DE USUARIO ============ -->
+  <div id="perfil-modal" class="hidden fixed inset-0 z-50 items-center justify-center p-4 bg-black/50"
+       role="dialog" aria-modal="true" aria-labelledby="perfil-modal-titulo">
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+      <div class="flex items-start justify-between gap-3 p-5 border-b">
+        <div>
+          <h2 id="perfil-modal-titulo" class="text-xl font-bold text-green-800">👤 Mi perfil</h2>
+          <p class="text-sm text-stone-600 mt-1">Datos de tu cuenta y de tu explotación.</p>
+        </div>
+        <button id="perfil-modal-x" type="button" aria-label="Cerrar"
+          class="text-stone-500 hover:text-stone-800 text-2xl leading-none px-2">&times;</button>
+      </div>
+
+      <div class="overflow-auto p-5 space-y-6">
+        <!-- Datos de la cuenta y de la explotación -->
+        <form id="perfil-form" class="space-y-4" novalidate>
+          <h3 class="font-semibold">Datos de la cuenta</h3>
+          <div class="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label for="perfil-usuario" class="block text-sm font-medium mb-1">Usuario</label>
+              <input id="perfil-usuario" type="text" maxlength="30" autocomplete="username"
+                class="w-full rounded-lg border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-600" />
+            </div>
+            <div>
+              <label for="perfil-email" class="block text-sm font-medium mb-1">Correo electrónico</label>
+              <input id="perfil-email" type="email" autocomplete="email"
+                class="w-full rounded-lg border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-600" />
+            </div>
+            <div>
+              <label for="perfil-perfil" class="block text-sm font-medium mb-1">Perfil de usuario</label>
+              <select id="perfil-perfil"
+                class="w-full rounded-lg border border-stone-300 px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-600">
+                <option value="ganadero">Ganadero</option>
+                <option value="veterinario">Veterinario</option>
+              </select>
+            </div>
+            <div>
+              <label for="perfil-tipo" class="block text-sm font-medium mb-1">Tipo de explotación</label>
+              <select id="perfil-tipo"
+                class="w-full rounded-lg border border-stone-300 px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-green-600">
+                <option value="bovino">Bovino (Vacas)</option>
+                <option value="porcino">Porcino (Cerdos)</option>
+                <option value="ovino">Ovino / Caprino (Ovejas / Cabras)</option>
+                <option value="avicola">Avícola (Pollos / Aves)</option>
+                <option value="mixta">Mixta</option>
+              </select>
+            </div>
+          </div>
+
+          <fieldset id="perfil-mixta-wrap" class="hidden rounded-lg border border-stone-200 bg-stone-50 p-3 space-y-2">
+            <legend class="px-1 text-sm font-medium">Especies de tu explotación mixta</legend>
+            <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="perfil-especie" value="bovino" class="accent-green-700" /> Bovino (Vacas)</label>
+            <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="perfil-especie" value="porcino" class="accent-green-700" /> Porcino (Cerdos)</label>
+            <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="perfil-especie" value="ovino" class="accent-green-700" /> Ovino / Caprino (Ovejas / Cabras)</label>
+            <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="perfil-especie" value="avicola" class="accent-green-700" /> Avícola (Pollos / Aves)</label>
+            <p class="text-xs text-stone-500">Marca al menos dos especies. No se puede quitar una especie que ya tenga animales (activos o dados de baja).</p>
+          </fieldset>
+
+          <p id="perfil-error" class="hidden text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2"></p>
+          <p id="perfil-ok" class="hidden text-sm text-green-700 bg-green-50 rounded-lg px-3 py-2"></p>
+          <button id="perfil-guardar" type="submit"
+            class="bg-green-700 hover:bg-green-800 text-white font-semibold rounded-lg px-5 py-2 text-sm transition">
+            Guardar cambios
+          </button>
+        </form>
+
+        <!-- Veterinarios (para el ganadero) o ganaderos (para el veterinario) -->
+        <section id="vinculos-seccion" class="border-t pt-5 space-y-3">
+          <div>
+            <h3 id="vinculos-titulo" class="font-semibold">🩺 Mis veterinarios</h3>
+            <p id="vinculos-ayuda" class="text-xs text-stone-500"></p>
+          </div>
+          <div id="vinculos-lista" class="space-y-2"></div>
+          <div id="invitar-wrap" class="space-y-2">
+            <button id="invitar-btn" type="button"
+              class="bg-green-700 hover:bg-green-800 text-white font-semibold rounded-lg px-5 py-2 text-sm transition">
+              🔑 Generar código de invitación
+            </button>
+            <div id="invitar-codigo-wrap" class="hidden rounded-lg border border-green-300 bg-green-50 p-3 space-y-1">
+              <p class="text-sm">Dale este código a tu veterinario:</p>
+              <div class="flex flex-wrap items-center gap-3">
+                <p id="invitar-codigo" class="font-mono text-2xl font-bold tracking-widest text-green-900 select-all"></p>
+                <button id="invitar-copiar" type="button"
+                  class="bg-white border border-green-300 hover:bg-green-100 text-green-900 rounded-lg px-3 py-1 text-sm">Copiar</button>
+              </div>
+              <p class="text-xs text-stone-600">Sirve una sola vez y caduca en 7 días.</p>
+            </div>
+          </div>
+          <form id="canjear-form" class="hidden flex flex-wrap items-end gap-2" novalidate>
+            <div>
+              <label for="canjear-codigo" class="block text-sm font-medium mb-1">Código de tu ganadero</label>
+              <input id="canjear-codigo" maxlength="11" placeholder="A1B2C-3D4E5" autocomplete="off"
+                class="w-48 rounded-lg border border-stone-300 px-3 py-2 font-mono uppercase tracking-widest focus:outline-none focus:ring-2 focus:ring-green-600" />
+            </div>
+            <button id="canjear-btn" type="submit"
+              class="bg-green-700 hover:bg-green-800 text-white font-semibold rounded-lg px-5 py-2 text-sm transition">Añadir ganadero</button>
+          </form>
+          <p id="vinculos-error" class="hidden text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2"></p>
+          <p id="vinculos-ok" class="hidden text-sm text-green-700 bg-green-50 rounded-lg px-3 py-2"></p>
+        </section>
+
+        <!-- Copia de seguridad: exportar / importar todos los datos de la explotación -->
+        <section id="copia-seccion" class="border-t pt-5 space-y-3">
+          <div>
+            <h3 class="font-semibold">💾 Copia de seguridad</h3>
+            <p class="text-xs text-stone-500">
+              Tus datos se guardan en la nube y puedes entrar desde cualquier dispositivo. Además, puedes descargar
+              una copia en un archivo y guardarla donde quieras (pendrive, correo…).
+            </p>
+          </div>
+          <p id="copia-ultima" class="text-sm text-stone-600"></p>
+          <div class="flex flex-wrap gap-2">
+            <button id="copia-exportar" type="button"
+              class="bg-green-700 hover:bg-green-800 text-white font-semibold rounded-lg px-5 py-2 text-sm transition">
+              ⬇️ Descargar copia (.json)
+            </button>
+            <button id="copia-importar" type="button"
+              class="bg-stone-200 hover:bg-stone-300 text-stone-800 font-semibold rounded-lg px-5 py-2 text-sm transition">
+              ⬆️ Restaurar desde copia…
+            </button>
+            <input id="copia-archivo" type="file" accept=".json,application/json" class="hidden" />
+          </div>
+          <div id="legado-wrap" class="hidden rounded-lg border border-sky-200 bg-sky-50 p-3 space-y-2">
+            <p class="text-sm text-sky-900">En este navegador hay datos de la versión anterior de la app (antes de la nube). Puedes subirlos a tu cuenta:</p>
+            <div class="flex flex-wrap items-center gap-2">
+              <select id="legado-cuenta"
+                class="rounded-lg border border-stone-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-600"></select>
+              <button id="legado-importar" type="button"
+                class="bg-sky-700 hover:bg-sky-800 text-white font-semibold rounded-lg px-4 py-2 text-sm transition">☁️ Subir a mi cuenta…</button>
+            </div>
+          </div>
+          <div id="copia-confirmar" class="hidden rounded-lg border border-amber-300 bg-amber-50 p-3 space-y-3">
+            <p id="copia-resumen" class="text-sm text-amber-900"></p>
+            <div class="flex flex-wrap gap-2">
+              <button id="copia-confirmar-si" type="button"
+                class="bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-lg px-4 py-2 text-sm transition">
+                Sustituir mis datos
+              </button>
+              <button id="copia-confirmar-no" type="button"
+                class="bg-stone-200 hover:bg-stone-300 text-stone-800 font-semibold rounded-lg px-4 py-2 text-sm transition">
+                Cancelar
+              </button>
+            </div>
+          </div>
+          <p id="copia-error" class="hidden text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2"></p>
+          <p id="copia-ok" class="hidden text-sm text-green-700 bg-green-50 rounded-lg px-3 py-2"></p>
+        </section>
+
+        <!-- Cambio de contraseña con verificación -->
+        <form id="pw-form" class="border-t pt-5 space-y-4" novalidate autocomplete="off">
+          <div>
+            <h3 class="font-semibold">🔒 Cambiar contraseña</h3>
+            <p class="text-xs text-stone-500">Escribe tu contraseña actual y la nueva dos veces.</p>
+          </div>
+          <div id="pw-paso-datos" class="grid gap-4 sm:grid-cols-3">
+            <div>
+              <label for="pw-actual" class="block text-sm font-medium mb-1">Contraseña actual</label>
+              <input id="pw-actual" type="password" autocomplete="current-password"
+                class="w-full rounded-lg border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-600" />
+            </div>
+            <div>
+              <label for="pw-nueva" class="block text-sm font-medium mb-1">Nueva contraseña</label>
+              <input id="pw-nueva" type="password" autocomplete="new-password"
+                class="w-full rounded-lg border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-600" />
+            </div>
+            <div>
+              <label for="pw-nueva2" class="block text-sm font-medium mb-1">Repetir nueva contraseña</label>
+              <input id="pw-nueva2" type="password" autocomplete="new-password"
+                class="w-full rounded-lg border border-stone-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-600" />
+            </div>
+          </div>
+
+          <div id="pw-paso-codigo" class="hidden space-y-3">
+            <p id="pw-sim" class="text-sm text-sky-900 bg-sky-50 border border-sky-200 rounded-lg px-3 py-2"></p>
+            <div class="max-w-xs">
+              <label for="pw-codigo" class="block text-sm font-medium mb-1">Código de verificación (6 dígitos)</label>
+              <input id="pw-codigo" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code"
+                class="w-full rounded-lg border border-stone-300 px-3 py-2 font-mono tracking-widest focus:outline-none focus:ring-2 focus:ring-green-600" />
+            </div>
+          </div>
+
+          <p id="pw-error" class="hidden text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2"></p>
+          <p id="pw-ok" class="hidden text-sm text-green-700 bg-green-50 rounded-lg px-3 py-2"></p>
+          <div class="flex flex-wrap gap-2">
+            <button id="pw-submit" type="submit"
+              class="bg-sky-700 hover:bg-sky-800 disabled:opacity-60 text-white font-semibold rounded-lg px-5 py-2 text-sm transition">
+              Cambiar contraseña
+            </button>
+            <button id="pw-cancelar" type="button"
+              class="hidden bg-stone-200 hover:bg-stone-300 text-stone-800 font-semibold rounded-lg px-5 py-2 text-sm transition">
+              Cancelar
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <div class="p-4 border-t flex justify-end">
+        <button id="perfil-modal-cerrar" type="button"
+          class="bg-stone-200 hover:bg-stone-300 text-stone-800 font-semibold rounded-lg px-4 py-2 text-sm transition">
+          Cerrar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Conexión con la nube (Supabase): cliente, configuración pública y capa de sincronización -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="config.js"></script>
+  <script src="nube.js"></script>
+  <script src="app.js"></script>
+  <!-- PWA: registro del Service Worker y botón de instalación (después de app.js) -->
+  <script src="pwa.js"></script>
+</body>
+</html>
