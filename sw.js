@@ -4,7 +4,7 @@
    - Teselas del mapa: caché con límite, para que el mapa visitado siga viéndose sin conexión.
    Los datos de la app viven en localStorage, así que este SW nunca toca la lógica ni los datos.
    Para publicar una versión nueva, sube el número de VERSION. */
-const VERSION = 'v18';
+const VERSION = 'v19';
 const CACHE_APP = `gg-app-${VERSION}`;
 const CACHE_CDN = `gg-cdn-${VERSION}`;
 const CACHE_TILES = 'gg-tiles';          // sin versión: no hace falta vaciarlo al actualizar

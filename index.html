@@ -54,6 +54,35 @@
     .modo-veterinario .col-ubicacion, .modo-veterinario [data-tab="fincas"], .modo-veterinario [data-tab="cebaderos"], .modo-veterinario [data-tab="economia"], .modo-veterinario .solo-ganadero,
     .modo-veterinario div:has(> #stat-fincas), .modo-veterinario div:has(> #stat-sin-finca) { display: none !important; }
 
+
+    /* ---------- Móvil: sin desplazamiento horizontal y menú desplegable ---------- */
+    html, body { max-width: 100%; overflow-x: hidden; }
+    @supports (overflow: clip) { html, body { overflow-x: clip; } }
+    @media (max-width: 767px) {
+      #menu-tabs { display: none; flex-direction: column; gap: 2px; padding-bottom: .5rem; }
+      #menu-tabs.abierto { display: flex; }
+      #menu-tabs .tab-btn { border-radius: .5rem; text-align: left; padding: .7rem 1rem; font-size: 1rem; }
+    }
+    /* Tablas en el móvil: cada fila se convierte en una tarjeta (sin desplazamiento lateral) */
+    @media (max-width: 767px) {
+      table.tabla-movil, table.tabla-movil tbody, table.tabla-movil tr, table.tabla-movil td { display: block; width: 100%; }
+      table.tabla-movil thead { display: none; }
+      table.tabla-movil tr { border: 1px solid #e7e5e4 !important; border-radius: .75rem; padding: .35rem .8rem; margin-bottom: .6rem; background: #fff; }
+      table.tabla-movil td { display: flex; justify-content: space-between; align-items: center; gap: .75rem;
+        padding: .35rem 0 !important; text-align: right; border: 0 !important; overflow-wrap: anywhere; white-space: normal !important; }
+      table.tabla-movil td[data-label="Acciones"] { justify-content: flex-end; flex-wrap: wrap; column-gap: 1rem; row-gap: .25rem; }
+      table.tabla-movil td[data-label="Acciones"]::before { display: none; }
+      table.tabla-movil td + td { border-top: 1px dashed #e7e5e4 !important; }
+      table.tabla-movil td[data-label]::before { content: attr(data-label); flex: none; max-width: 45%; text-align: left;
+        font-size: .7rem; text-transform: uppercase; letter-spacing: .03em; color: #78716c; font-weight: 600; }
+      table.tabla-movil td:not([data-label]) { justify-content: flex-end; flex-wrap: wrap; }
+      table.tabla-movil td[colspan] { justify-content: center; text-align: center; }
+      table.tabla-movil td[colspan]::before { display: none; }
+      table.tabla-movil tfoot tr { font-weight: 600; }
+    }
+    #menu-movil-btn .flecha { transition: transform .15s; }
+    #menu-movil-btn[aria-expanded="true"] .flecha { transform: rotate(180deg); }
+
     /* ---------- Árbol genealógico ---------- */
     .arbol-caja { display: block; width: 11rem; text-align: left; background: #fff; border: 1px solid #d6d3d1;
       border-radius: 0.6rem; padding: 0.45rem 0.6rem; box-shadow: 0 1px 2px rgba(0,0,0,.05); }
@@ -208,16 +237,16 @@
   <!-- ============ APLICACIÓN ============ -->
   <div id="app-view" class="hidden">
     <header class="bg-green-800 text-white shadow">
-      <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
-        <div class="flex items-center gap-3 text-lg font-bold">
+      <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-2 sm:gap-3">
+        <div class="flex min-w-0 items-center gap-2 sm:gap-3 text-base sm:text-lg font-bold">
           <!-- Iconos PNG de las especies de la cuenta, en fila, sobre un fondo blanco redondeado (resalta sobre el verde).
                Con una especie queda un círculo; con varias se ensancha. Lo rellena actualizarIconoCabecera() en app.js.
                El logotipo (logo.png) solo se usa en la pantalla de inicio de sesión y registro. -->
           <span id="app-icono" role="img" aria-label="Explotación"
             class="flex h-12 min-w-[3rem] shrink-0 flex-nowrap items-center justify-center gap-1 rounded-full bg-white px-1.5 shadow-md ring-2 ring-white/60"></span>
-          <span>Gestión Ganadera</span>
+          <span class="truncate">Gestión Ganadera</span>
         </div>
-        <div class="flex items-center gap-3 text-sm">
+        <div class="flex shrink-0 items-center gap-1.5 sm:gap-3 text-sm">
           <span id="ganadero-vista-wrap" class="hidden flex items-center gap-1">
             <label for="ganadero-vista" class="hidden md:inline text-green-100">Ganadero:</label>
             <select id="ganadero-vista"
@@ -230,12 +259,18 @@
             class="bg-green-700 hover:bg-green-600 rounded-lg px-3 py-1.5 transition flex items-center gap-1.5">
             <span aria-hidden="true">👤</span><span id="user-label" class="hidden sm:inline"></span>
           </button>
-          <button id="logout-btn" class="bg-green-900 hover:bg-green-950 rounded-lg px-3 py-1.5 transition">
-            Cerrar sesión
+          <button id="logout-btn" title="Cerrar sesión" aria-label="Cerrar sesión" class="bg-green-900 hover:bg-green-950 rounded-lg px-3 py-1.5 transition">
+            <span class="sm:hidden" aria-hidden="true">⏻</span><span class="hidden sm:inline">Cerrar sesión</span>
           </button>
         </div>
       </div>
-      <nav class="max-w-6xl mx-auto px-4 flex gap-1">
+      <nav class="max-w-6xl mx-auto px-4">
+        <button id="menu-movil-btn" type="button" aria-expanded="false" aria-controls="menu-tabs"
+          class="md:hidden w-full mb-2 flex items-center justify-between gap-2 rounded-lg bg-green-700 hover:bg-green-600 px-4 py-2.5 font-medium transition">
+          <span class="flex items-center gap-2"><span aria-hidden="true">☰</span><span id="menu-actual">Menú</span></span>
+          <span class="flecha" aria-hidden="true">▾</span>
+        </button>
+        <div id="menu-tabs" class="md:flex md:gap-1">
         <button data-tab="vacas"
           class="tab-btn px-4 py-2 rounded-t-lg text-sm font-medium transition"><span data-t="tabAnimales">Vacas</span></button>
         <button data-tab="fincas"
@@ -246,6 +281,7 @@
           class="tab-btn px-4 py-2 rounded-t-lg text-sm font-medium transition">Economía</button>
         <button data-tab="bajas"
           class="tab-btn px-4 py-2 rounded-t-lg text-sm font-medium transition">Histórico de bajas</button>
+        </div>
       </nav>
     </header>
 
@@ -453,7 +489,7 @@
           </div>
 
           <div class="overflow-x-auto">
-            <table class="w-full text-sm text-left">
+            <table class="tabla-movil w-full text-sm text-left">
               <thead class="text-xs uppercase text-stone-500 border-b">
                 <tr>
                   <th class="py-2 pr-4">Crotal</th>
@@ -689,7 +725,7 @@
             </div>
           </div>
           <div class="overflow-x-auto">
-            <table class="w-full text-sm text-left">
+            <table class="tabla-movil w-full text-sm text-left">
               <thead class="text-xs uppercase text-stone-500 border-b">
                 <tr>
                   <th class="py-2 pr-4">Animal</th>
@@ -730,7 +766,7 @@
           </div>
           <p id="cebo-resumen" class="text-sm text-stone-600 mb-3"></p>
           <div class="overflow-x-auto">
-            <table class="w-full text-sm text-left">
+            <table class="tabla-movil w-full text-sm text-left">
               <thead class="text-xs uppercase text-stone-500 border-b">
                 <tr>
                   <th class="py-2 pr-4">Animal</th>
@@ -878,7 +914,7 @@
             </div>
           </div>
           <div class="overflow-x-auto">
-            <table class="w-full text-sm text-left">
+            <table class="tabla-movil w-full text-sm text-left">
               <thead class="text-xs uppercase text-stone-500 border-b">
                 <tr>
                   <th class="py-2 pr-4">Fecha</th>
@@ -900,7 +936,7 @@
           <h3 class="font-semibold">🐂 Rentabilidad por animal</h3>
           <p class="text-xs text-stone-500 mb-3">Ingresos menos gastos de cada animal (todo su historial). Los gastos ligados a un cebadero se reparten entre los terneros que había dentro ese mes, según los días de cada uno.</p>
           <div class="overflow-x-auto">
-            <table class="w-full text-sm text-left">
+            <table class="tabla-movil w-full text-sm text-left">
               <thead class="text-xs uppercase text-stone-500 border-b">
                 <tr>
                   <th class="py-2 pr-4">Animal</th>
@@ -919,7 +955,7 @@
           <p id="renta-nota" class="text-xs text-amber-800 mt-2"></p>
           <h3 class="font-semibold mt-5 mb-2">Por toro (padre)</h3>
           <div class="overflow-x-auto">
-            <table class="w-full text-sm text-left">
+            <table class="tabla-movil w-full text-sm text-left">
               <thead class="text-xs uppercase text-stone-500 border-b">
                 <tr>
                   <th class="py-2 pr-4">Padre</th>
@@ -997,7 +1033,7 @@
           </div>
 
           <div class="overflow-x-auto">
-            <table class="w-full text-sm text-left">
+            <table class="tabla-movil w-full text-sm text-left">
               <thead class="text-xs uppercase text-stone-500 border-b">
                 <tr>
                   <th class="py-2 pr-4">Fecha</th>
@@ -1039,7 +1075,7 @@
       </div>
 
       <div class="overflow-auto p-5">
-        <table class="w-full text-sm text-left">
+        <table class="tabla-movil w-full text-sm text-left">
           <thead class="text-xs uppercase text-stone-500 border-b">
             <tr>
               <th class="py-2 pr-4">Crotal</th>

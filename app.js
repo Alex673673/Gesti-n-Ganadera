@@ -1392,6 +1392,7 @@ function aplicarVocabulario() {
   th('bajas-body', 2, v.crotal);
   th('lote-modal-body', 0, v.crotal);
   $('lote-modal-filtrar').textContent = `Filtrar en ${cap(v.animales)}`;
+  actualizarMenuActual();
 }
 
 async function mostrarApp(esNuevo = false) {
@@ -2139,6 +2140,9 @@ function cambiarTab(nombre) {
     btn.classList.toggle('hover:bg-green-700', !activo);
   });
 
+  cerrarMenuMovil();
+  actualizarMenuActual();
+
   if (nombre === 'fincas') {
     initMapa();
     // El mapa estaba oculto: recalcula su tamaño al mostrarse
@@ -2149,6 +2153,53 @@ function cambiarTab(nombre) {
 document.querySelectorAll('.tab-btn').forEach((btn) => {
   btn.addEventListener('click', () => cambiarTab(btn.dataset.tab));
 });
+
+/* Tablas en el móvil: cada celda lleva el nombre de su columna para mostrarse como tarjeta */
+function etiquetarTabla(tabla) {
+  const ths = [...tabla.querySelectorAll('thead th')];
+  if (!ths.length) return;
+  tabla.querySelectorAll('tbody tr, tfoot tr').forEach((tr) => {
+    let col = 0;
+    [...tr.children].forEach((td) => {
+      const th = ths[col];
+      const texto = th ? th.textContent.trim() : '';
+      if (texto && !td.hasAttribute('colspan')) td.setAttribute('data-label', texto);
+      else td.removeAttribute('data-label');
+      col += Number(td.getAttribute('colspan')) || 1;
+    });
+  });
+}
+document.querySelectorAll('table.tabla-movil').forEach((tabla) => {
+  etiquetarTabla(tabla);
+  let pendiente = false;
+  new MutationObserver(() => {
+    if (pendiente) return;
+    pendiente = true;
+    requestAnimationFrame(() => { pendiente = false; etiquetarTabla(tabla); });
+  }).observe(tabla, { childList: true, subtree: true });
+});
+
+/* Menú desplegable en el móvil: muestra la pestaña actual y abre la lista al pulsarlo */
+function actualizarMenuActual() {
+  const activo = document.querySelector('.tab-btn.bg-stone-100');
+  if ($('menu-actual') && activo) $('menu-actual').textContent = activo.textContent.trim();
+}
+function cerrarMenuMovil() {
+  if (!$('menu-tabs')) return;
+  $('menu-tabs').classList.remove('abierto');
+  $('menu-movil-btn').setAttribute('aria-expanded', 'false');
+}
+if ($('menu-movil-btn')) {
+  $('menu-movil-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const abrir = !$('menu-tabs').classList.contains('abierto');
+    $('menu-tabs').classList.toggle('abierto', abrir);
+    $('menu-movil-btn').setAttribute('aria-expanded', String(abrir));
+  });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest || !e.target.closest('#menu-tabs, #menu-movil-btn')) cerrarMenuMovil();
+  });
+}
 
 /* ============================================================
    MAPA
