@@ -59,10 +59,23 @@
   // Mensajes de error comprensibles
   function traducirError(err) {
     const m = String((err && (err.message || err.error_description)) || err || '');
-    if (/Invalid login credentials/i.test(m)) return 'Correo o contraseña incorrectos.';
+    if (/Invalid login credentials/i.test(m)) {
+      return 'Correo o contraseña incorrectos. Si no recuerdas la contraseña, pulsa «¿Olvidaste tu contraseña?».';
+    }
     if (/Email not confirmed/i.test(m)) return 'Todavía no has confirmado tu correo. Revisa tu bandeja de entrada (y la de spam).';
     if (/User already registered/i.test(m)) return 'Ya existe una cuenta con ese correo.';
-    if (/Password should be at least/i.test(m)) return 'La contraseña es demasiado corta (mínimo 6 caracteres).';
+    // El mínimo lo fija Supabase (Authentication > Providers > Email): se lee del propio mensaje, no se supone
+    const minimo = m.match(/Password should be at least (\d+)/i);
+    if (minimo) return `La contraseña es demasiado corta: debe tener al menos ${minimo[1]} caracteres.`;
+    if (/Password should contain/i.test(m)) {
+      const pide = [];
+      if (/abcdefghijklmnopqrstuvwxyz/.test(m)) pide.push('minúsculas');
+      if (/ABCDEFGHIJKLMNOPQRSTUVWXYZ/.test(m)) pide.push('mayúsculas');
+      if (/0123456789/.test(m)) pide.push('números');
+      if (/[!@#$%^&*]/.test(m.replace(/.*0123456789/, ''))) pide.push('símbolos (por ejemplo ! @ # $)');
+      return `La contraseña debe llevar ${pide.length ? pide.join(', ') : 'letras, números y símbolos'}.`;
+    }
+    if (/known to be weak|pwned|leaked|easy to guess/i.test(m)) return 'Esa contraseña es demasiado común o ha aparecido en filtraciones. Elige otra.';
     if (/rate limit|too many/i.test(m)) return 'Demasiados intentos seguidos. Espera un poco y vuelve a probar.';
     if (/Failed to fetch|NetworkError|network|fetch failed|Load failed/i.test(m)) return 'Sin conexión con la nube. Comprueba tu internet.';
     if (/economia/i.test(m) && /schema cache|does not exist|PGRST205/i.test(m)) {
@@ -472,6 +485,9 @@
       // Lo que está en la nube, no en local y no se conocía en la última subida, es nuevo de otra persona: se añade
       const mezcla = {};
       TABLAS.forEach((t) => {
+        // La sanidad la escribe solo el veterinario: para el ganadero manda siempre la nube
+        // (si no, un tratamiento que el veterinario corrigió o borró seguiría viéndose con la versión vieja)
+        if (t === 'tratamientos') { mezcla[t] = filasNube[t]; return; }
         const ids = new Set(locales[t].map((f) => f.id));
         const nuevasNube = filasNube[t].filter((f) => !ids.has(f.id) && !conocidos[t].has(f.id));
         mezcla[t] = [...locales[t], ...nuevasNube];

@@ -783,8 +783,7 @@ function prepararCria(madreId, nacimiento) {
   actualizarVisibilidadGestacion();
   $('vaca-finca').value = madre.fincaId || '';
   actualizarMovimientoForm();
-  $('vaca-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
-  $('vaca-crotal').focus();
+  mostrarFormVaca();
 }
 
 function registrarParto(id) {
@@ -2747,13 +2746,31 @@ function renderTodo() {
 /* ============================================================
    VACAS: añadir / editar / eliminar
    ============================================================ */
+// El formulario de alta / edición está plegado y se despliega bajo demanda
+function mostrarFormVaca() {
+  $('vaca-form').classList.remove('hidden');
+  $('vaca-abrir').classList.add('hidden');
+  $('vaca-abrir').setAttribute('aria-expanded', 'true');
+  ocultarAvisoVaca();
+  $('vaca-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  $('vaca-crotal').focus({ preventScroll: true });
+}
+
+function ocultarFormVaca() {
+  $('vaca-form').classList.add('hidden');
+  $('vaca-abrir').classList.remove('hidden');
+  $('vaca-abrir').setAttribute('aria-expanded', 'false');
+}
+
+// Deja el formulario vacío y plegado
 function resetFormVaca() {
   editVacaId = null;
   $('vaca-form').reset();
   ocultarError($('vaca-error'));
+  ocultarFormVaca();
+  $('vaca-abrir').textContent = `➕ Añadir ${vocab().animal}`;
   $('vaca-form-title').textContent = `Añadir ${vocab().animal}`;
   $('vaca-submit').textContent = `Añadir ${vocab().animal}`;
-  $('vaca-cancel').classList.add('hidden');
   $('vaca-editando').classList.add('hidden');
   $('vaca-especie').disabled = false;
   $('vaca-finca').disabled = false;
@@ -2807,12 +2824,10 @@ function iniciarEdicionVaca(id) {
   ocultarError($('vaca-error'));
   $('vaca-form-title').textContent = `Editar ${vocab().animal} ${v.crotal}`;
   $('vaca-submit').textContent = 'Guardar cambios';
-  $('vaca-cancel').classList.remove('hidden');
   $('vaca-editando').classList.remove('hidden');
 
   renderVacas();
-  $('vaca-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
-  $('vaca-crotal').focus();
+  mostrarFormVaca();
 }
 
 $('vaca-form').addEventListener('submit', (e) => {
@@ -2951,11 +2966,16 @@ $('vaca-form').addEventListener('submit', (e) => {
   const mensaje = madreGuardada
     ? `✔ ${etiquetaVaca(datos)} queda registrado/a como cría de ${etiquetaVaca(madreGuardada)}, ` +
       `que ahora tiene ${criasDe(madreGuardada.id).length} ${criasDe(madreGuardada.id).length === 1 ? 'cría' : 'crías'}.`
-    : '';
+    : `✔ ${etiquetaVaca(datos)} ${editVacaId ? 'actualizado/a' : 'añadido/a'}.`;
 
-  resetFormVaca();
+  resetFormVaca(); // se pliega el formulario; el aviso queda junto al botón
   renderTodo();
-  if (mensaje) mostrarAvisoVaca(mensaje);
+  mostrarAvisoVaca(mensaje);
+});
+
+$('vaca-abrir').addEventListener('click', () => {
+  resetFormVaca();
+  mostrarFormVaca();
 });
 
 $('vaca-cancel').addEventListener('click', () => {

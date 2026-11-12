@@ -40,7 +40,7 @@
     .leaflet-tooltip-top.tooltip-finca::before { border-top-color: rgba(20, 83, 45, 0.85); }
 
     /* ---------- Veterinario: ve la explotación del ganadero y solo registra tratamientos ---------- */
-    .modo-veterinario #vaca-form, .modo-veterinario #finca-form, .modo-veterinario #cebadero-form,
+    .modo-veterinario #vaca-form, .modo-veterinario #vaca-abrir, .modo-veterinario #finca-form, .modo-veterinario #cebadero-form,
     .modo-veterinario #cebo-form-card, .modo-veterinario #vaca-modal-cria, .modo-veterinario #vaca-modal-editar,
     .modo-veterinario #vaca-modal-baja, .modo-veterinario #ficha-sit-seccion, .modo-veterinario #copia-importar,
     .modo-veterinario #legado-wrap, .modo-veterinario #copia-confirmar, .modo-veterinario .leaflet-draw,
@@ -340,7 +340,16 @@
           <div id="partos-lista" class="max-h-72 overflow-auto"></div>
         </div>
 
-        <form id="vaca-form" class="bg-white rounded-xl shadow p-5">
+        <!-- El formulario está plegado: se despliega con este botón, al editar o al registrar una cría -->
+        <div>
+          <button id="vaca-abrir" type="button" aria-controls="vaca-form" aria-expanded="false"
+            class="bg-green-700 hover:bg-green-800 text-white font-semibold rounded-lg px-5 py-2.5 shadow transition">
+            ➕ Añadir vaca
+          </button>
+          <p id="vaca-aviso" class="hidden mt-3 text-sm text-green-700 bg-green-50 rounded-lg px-3 py-2"></p>
+        </div>
+
+        <form id="vaca-form" class="hidden bg-white rounded-xl shadow p-5">
           <div class="flex items-center justify-between mb-4">
             <h2 id="vaca-form-title" class="text-lg font-semibold">Añadir vaca</h2>
             <span id="vaca-editando" class="hidden text-xs bg-amber-100 text-amber-800 rounded-full px-3 py-1">Modo edición</span>
@@ -452,15 +461,14 @@
             <div id="vaca-crias"></div>
           </div>
           <p id="vaca-error" class="hidden mt-3 text-sm text-red-600"></p>
-          <p id="vaca-aviso" class="hidden mt-3 text-sm text-green-700 bg-green-50 rounded-lg px-3 py-2"></p>
           <div class="mt-4 flex flex-wrap gap-2">
             <button id="vaca-submit" type="submit"
               class="bg-green-700 hover:bg-green-800 text-white font-semibold rounded-lg px-5 py-2 transition">
               Añadir vaca
             </button>
             <button id="vaca-cancel" type="button"
-              class="hidden bg-stone-200 hover:bg-stone-300 text-stone-800 font-semibold rounded-lg px-5 py-2 transition">
-              Cancelar edición
+              class="bg-stone-200 hover:bg-stone-300 text-stone-800 font-semibold rounded-lg px-5 py-2 transition">
+              Cancelar
             </button>
           </div>
         </form>
